@@ -535,7 +535,7 @@ async function msToken(){
 }
 function msLogout(){
   if (S.dirty && !confirm('아직 저장되지 않은 변경이 있습니다. 그래도 로그아웃할까요?')) return;
-  [LS_TOK, LS_GF, LS_GCACHE].forEach(k => localStorage.removeItem(k));
+  [LS_TOK, LS_GF, LS_GCACHE, LS_USER].forEach(k => localStorage.removeItem(k)); S.user = null; S.me = null;
   S.mode = null; S.g = {}; S.db = emptyDb(); S.gErr = ''; render();
 }
 
@@ -641,6 +641,8 @@ async function gConnect(f){
   let db = remote, fromCache = false;
   const c = lsJson(LS_GCACHE);
   if (c && c.key === gKey() && c.db){ const m = merge(db, normDb(c.db)); fromCache = JSON.stringify(m) !== JSON.stringify(db); db = m; }
+  const me = await gjson('/me?$select=id,displayName,userPrincipalName,mail');
+  S.me = {id: me.id || '', email: (me.userPrincipalName || me.mail || '').toLowerCase(), name: me.displayName || ''};
   S.db = db; S.g.etag = etag; S.mode = 'graph'; S.dir = null; S.gErr = '';
   localStorage.setItem(LS_GF, JSON.stringify(f)); sessionStorage.removeItem(SS_SILENT);
   setStatus('ok');
@@ -678,7 +680,31 @@ function localMode(){
   try { S.db = normDb(JSON.parse(localStorage.getItem(LS_KEY) || 'null')); } catch(e){ S.db = emptyDb(); }
   S.mode = 'local'; S.status = {kind:'local'}; afterLoad();
 }
+/* Microsoft 계정 모드: 로그인한 계정(이메일)에 구성원 1명을 고정 연결. 다른 사람 이름은 고를 수 없음 */
+function acctMember(){
+  const me = S.me; if (!me) return null;
+  const all = Object.values(S.db.members).filter(m => !m.purged);
+  return all.find(m => me.id && m.msId === me.id) || all.find(m => me.email && (m.email || '').toLowerCase() === me.email) || null;
+}
+function acctModal(){
+  openModal(() => {
+    const free = members().filter(m => !m.email && !m.msId);
+    return {title: '처음 사용 — 내 이름 정하기', body: `<p style="margin-top:0;line-height:1.6">이 Microsoft 계정(<b>${esc(S.me.email)}</b>)으로 플래너에서 쓸 이름을 정합니다.<br>한 계정에는 이름 하나만 연결되며, 다른 사람의 이름은 고를 수 없습니다. 이름(표시 명칭)은 나중에 바꿀 수 있습니다.</p>
+      <div class="mrow"><input type="text" id="acct-name" data-key="acct-new" placeholder="이름 (예: 홍길동)" value="${esc(S.me.name || '')}"><button class="btn primary" data-act="acct-new">이 이름으로 시작</button></div>
+      ${free.length ? `<div class="lbl" style="margin-top:18px">예전에 쓰던 이름이 아래에 있으면 본인 이름을 누르세요 (계정이 아직 연결되지 않은 이름만 표시, 한 번 연결하면 바꿀 수 없음)</div>
+        ${free.map(m => `<div class="mrow"><button class="btn" style="flex:1;text-align:left;display:flex;align-items:center;gap:8px" data-act="acct-claim" data-id="${m.id}">${avatar(m.id)}${esc(m.name)}</button></div>`).join('')}` : ''}`};
+  }, {locked: true});
+}
+function acctBind(id){ S.user = id; localStorage.setItem(LS_USER, id); S.modal = null; closeModal(); ensurePlan(); purgeOld(); render(); }
 function afterLoad(){
+  if (S.mode === 'graph'){
+    const m = acctMember();
+    if (!m){ S.user = null; render(); acctModal(); return; }
+    if (m.deleted) setF('members', m.id, 'deleted', false);          // 구성원에서 지워졌던 계정이 다시 들어오면 되살림
+    if (!m.msId && S.me.id) setF('members', m.id, 'msId', S.me.id);
+    if (!m.email && S.me.email) setF('members', m.id, 'email', S.me.email);
+    acctBind(m.id); return;
+  }
   if (!S.user || !isMember(S.user)){ render(); userModal(); return; }
   ensurePlan(); purgeOld(); render();
 }
@@ -766,7 +792,6 @@ function renderStart(){
         <button class="btn primary" data-act="gf-connect" ${S.gBusy ? 'disabled' : ''}>${S.gBusy ? '연결 중…' : '폴더 연결'}</button>
         ${gFolder() && !S.gBusy ? `<button class="btn" data-act="gf-retry">‘${esc(gFolder().name)}’ 다시 연결</button>` : ''}`}
       ${S.gErr ? `<div class="warn">${esc(S.gErr)}</div>` : ''}
-      ${ok ? `<div class="sub">이 PC에서 동기화 폴더로 쓰기</div>${S.savedDir ? `<button class="btn" data-act="reconnect">‘${esc(S.savedDir.name)}’ 폴더 다시 연결</button>` : ''}<button class="btn" data-act="pick-folder">PC의 공유 폴더 선택</button>` : ''}
       <button class="btn" data-act="local-mode">체험 모드 (이 기기 브라우저에만 저장)</button>
       <div class="hint">· 공유 폴더는 <b>편집 권한</b>으로 공유받아야 수정할 수 있습니다.<br>· 데이터는 OneDrive 폴더의 <code>${FILE}</code>에만 저장되고, 이 웹 주소에는 저장되지 않습니다.<br>· 다른 사람의 변경은 약 10초 안에 반영됩니다.</div>
     </div></div>`;
@@ -796,7 +821,7 @@ function navHtml(){
       <div class="nav-item" data-act="export-csv">⭳ 엑셀(CSV) 내보내기</div>
       <div class="nav-item" data-act="export-json">⭳ 백업(JSON) 받기</div>
       ${S.mode === 'graph' ? `<div class="nav-item" data-act="gf-change" title="다른 폴더 연결">☁ 폴더 연결 해제</div><div class="nav-item" data-act="ms-logout" title="${esc(msTok()?.hint || '')}">⎋ 로그아웃 <span class="muted">${esc(msTok()?.name || '')}</span></div>` : ''}
-      <div class="nav-item" data-act="switch-user" title="사용자 변경">${S.user && isMember(S.user) ? avatar(S.user,'sm') : ''}<span>${esc(myName())}</span><span class="muted">(변경)</span></div>
+      <div class="nav-item" data-act="switch-user" title="사용자 변경">${S.user && isMember(S.user) ? avatar(S.user,'sm') : ''}<span>${esc(myName())}</span><span class="muted">${S.mode === 'graph' ? '(이름 변경)' : '(변경)'}</span></div>
       <div id="status" class="status ${S.mode === 'local' ? 'local' : S.status.kind}">${statusHtml()}</div>
     </div></nav>`;
 }
@@ -1114,9 +1139,9 @@ function trashModal(){
 }
 function membersModal(){
   openModal(() => ({title:`구성원 관리 <span class="muted" style="margin-left:8px;font-weight:400">${members().length}명</span>`, body: `
-    ${members().map(m => `<div class="mrow">${avatar(m.id)}<input type="text" data-chg="mem-name" data-id="${m.id}" value="${esc(m.name)}">${m.id === S.user ? '<span class="muted">나</span>' : `<button class="btn danger" data-act="mem-del" data-id="${m.id}">삭제</button>`}</div>`).join('')}
+    ${members().map(m => `<div class="mrow">${avatar(m.id)}<input type="text" data-chg="mem-name" data-id="${m.id}" value="${esc(m.name)}"><span class="muted" style="min-width:120px;word-break:break-all">${m.email ? '☁ ' + esc(m.email) : '계정 미연결'}</span>${m.id === S.user ? '<span class="muted">나</span>' : `<button class="btn danger" data-act="mem-del" data-id="${m.id}">삭제</button>`}</div>`).join('')}
     <div class="mrow" style="margin-top:10px"><input type="text" id="mem-new" data-key="mem-add" placeholder="새 구성원 이름"><button class="btn primary" data-act="mem-add">추가</button></div>
-    <div class="muted" style="margin-top:8px">구성원은 모든 플랜에서 담당자로 지정할 수 있습니다. 삭제해도 기존 이력의 이름은 남습니다.</div>`}));
+    <div class="muted" style="margin-top:8px;line-height:1.6">구성원은 모든 플랜에서 담당자로 지정할 수 있습니다. 삭제해도 기존 이력의 이름은 남습니다.<br>Microsoft 계정과 이름은 1:1로 연결되며, 연결된 계정은 바꿀 수 없습니다(이름만 변경 가능). 여기서 추가한 이름은 ‘계정 미연결’ 상태로, 그 사람이 처음 로그인할 때 한 번 연결할 수 있습니다.</div>`}));
 }
 function labelsModal(pid){
   openModal(() => ({title:`레이블 관리 — ${esc(S.db.plans[pid]?.name)}`, body: `
@@ -1339,7 +1364,12 @@ const ACT = {
   'activity': () => activityModal(),
   'export-csv': () => exportCsv(),
   'export-json': () => download(`planner_data_백업_${today().replace(/-/g,'')}.json`, JSON.stringify(S.db, null, 1), 'application/json'),
-  'switch-user': () => userModal(),
+  'switch-user': () => S.mode === 'graph' ? ACT['rename-me']() : userModal(),
+  'rename-me': () => { const m = S.db.members[S.user]; if (!m) return; const n = prompt('내 이름(표시 명칭) 바꾸기', m.name); if (n && n.trim() && n.trim() !== m.name){ setF('members', m.id, 'name', n.trim()); render(); } },
+  'acct-new': () => { const n = $('#acct-name').value.trim(); if (!n || acctMember()) return; const m = create('members', {name:n, email:S.me.email, msId:S.me.id}); S.db.members[m.id].createdBy = m.id; acctBind(m.id); },
+  'acct-claim': el => { const m = S.db.members[el.dataset.id]; if (!m || m.email || m.msId || acctMember()) return;
+    if (!confirm(`‘${m.name}’ 이름을 이 계정(${S.me.email})에 연결할까요?\n연결한 뒤에는 다른 이름으로 바꿔 고를 수 없습니다. (표시 명칭 변경은 가능)`)) return;
+    setF('members', m.id, 'email', S.me.email); setF('members', m.id, 'msId', S.me.id); acctBind(m.id); },
   'pick-user': el => { S.user = el.dataset.id; localStorage.setItem(LS_USER, S.user); S.modal = null; closeModal(); ensurePlan(); render(); },
   'user-new': () => { const n = $('#user-new').value.trim(); if (!n) return; S.user = null; const m = create('members', {name:n}); S.db.members[m.id].createdBy = m.id; S.user = m.id; localStorage.setItem(LS_USER, m.id); S.modal = null; closeModal(); ensurePlan(); render(); },
   'mem-add': () => { const i = $('#mem-new'), n = i.value.trim(); if (!n) return; create('members', {name:n}); i.value = ''; render(); refreshModal(true); $('#mem-new')?.focus(); },
@@ -1416,6 +1446,7 @@ document.addEventListener('keydown', e => {
     else if (k === 'lm-add') ACT['lm-add']();
     else if (k === 'user-new') ACT['user-new']();
     else if (k === 'gf-in') ACT['gf-connect']();
+    else if (k === 'acct-new') ACT['acct-new']();
     return;
   }
   if (k && e.key === 'Escape'){ if (k === 'newtask'){ S.ui.addingIn = null; render(); } if (k === 'newbucket'){ S.ui.addingBucket = false; render(); } return; }
