@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>팀 플래너</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:'Segoe UI','Malgun Gothic',sans-serif;font-size:14px;color:#242424;background:#f3f2f1;height:100vh;overflow:hidden}
+button{font:inherit;cursor:pointer;color:inherit}
+input,select,textarea{font:inherit;border:1px solid #d1d1d1;border-radius:4px;padding:5px 8px;background:#fff;color:#242424}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#0f6cbd;box-shadow:0 0 0 1px #0f6cbd}
+#app{display:flex;height:100vh}
+/* nav */
+#nav{width:236px;background:#fafafa;border-right:1px solid #e1dfdd;display:flex;flex-direction:column;padding:10px 8px;flex-shrink:0}
+.brand{font-weight:700;font-size:16px;padding:6px 10px 14px;color:#0f6cbd}
+.nav-item{padding:7px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-item:hover{background:#edebe9}
+.nav-item.active{background:#deecf9;font-weight:600}
+.nav-sec{display:flex;justify-content:space-between;align-items:center;padding:14px 10px 4px;font-size:12px;color:#605e5c;font-weight:600}
+.plans{overflow-y:auto;flex:1}
+.nav-bottom{border-top:1px solid #e1dfdd;padding-top:6px;font-size:13px}
+.status{padding:8px 10px 4px;font-size:12px;color:#605e5c;line-height:1.5;word-break:break-all}
+.status .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:#107c10}
+.status.saving .dot{background:#ffaa44}.status.err .dot{background:#d13438}.status.local .dot{background:#8a8886}
+.status.err{color:#a4262c}
+.pdot{width:24px;height:24px;border-radius:5px;color:#fff;font-size:12px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:600}
+.pdot.big{width:34px;height:34px;font-size:15px;border-radius:7px}
+.av{width:26px;height:26px;border-radius:50%;color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:600;border:2px solid #fff}
+.av.sm{width:22px;height:22px;font-size:10px}
+.avs{display:flex}.avs .av{margin-left:-6px}.avs .av:first-child{margin-left:0}
+/* header */
+#main{flex:1;display:flex;flex-direction:column;min-width:0}
+.ph{background:#fff;border-bottom:1px solid #e1dfdd;padding:10px 18px 0;position:relative}
+.ph-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ptitle{font-size:18px;font-weight:600;cursor:pointer;padding:2px 4px;border-radius:4px}
+.ptitle:hover{background:#f3f2f1}
+.tabs{display:flex;gap:2px;margin-left:10px;align-self:flex-end}
+.tab{padding:10px 12px 9px;cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;color:#424242}
+.tab:hover{color:#0f6cbd}
+.tab.active{border-color:#0f6cbd;font-weight:600;color:#0f6cbd}
+.ph-right{margin-left:auto;display:flex;align-items:center;gap:8px;padding:4px 0 8px}
+.search{width:190px}
+.btn{border:1px solid #d1d1d1;background:#fff;border-radius:4px;padding:5px 12px;white-space:nowrap}
+.btn:hover{background:#f3f2f1}
+.btn.primary{background:#0f6cbd;color:#fff;border-color:#0f6cbd}
+.btn.primary:hover{background:#115ea3}
+.btn.on{background:#deecf9;border-color:#0f6cbd;color:#0f6cbd}
+.btn.danger{color:#a4262c}
+.ib{border:none;background:transparent;border-radius:4px;padding:2px 7px;color:#605e5c;font-size:15px;line-height:1.4}
+.ib:hover{background:#e1dfdd;color:#242424}
+.gb{display:flex;align-items:center;gap:6px;font-size:13px;color:#605e5c}
+/* filter */
+.fpanel{position:absolute;right:18px;top:100%;z-index:30;background:#fff;border:1px solid #e1dfdd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:12px 14px;width:300px;max-height:70vh;overflow:auto}
+.fsec{margin-bottom:10px}.fsec h4{margin:0 0 6px;font-size:12px;color:#605e5c}
+.fopt{display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer}
+.fhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:600}
+/* board */
+#content{flex:1;overflow:auto;min-height:0}
+#content.noscroll{overflow:hidden}
+.board{display:flex;gap:14px;padding:14px 18px 0;height:100%;overflow-x:auto;align-items:flex-start}
+.col{width:282px;flex-shrink:0;display:flex;flex-direction:column;max-height:100%;border-radius:8px}
+.col.bover{box-shadow:-4px 0 0 #0f6cbd}
+.col.bover-r{box-shadow:4px 0 0 #0f6cbd}
+.col-h{display:flex;align-items:center;gap:6px;padding:6px 4px 8px;font-weight:600;min-height:36px}
+.col-h[draggable=true]{cursor:grab}
+.col-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cnt{color:#8a8886;font-weight:400;font-size:12px}
+.col-h .ib{margin-left:auto}
+.addt{border:none;background:#fff;border-radius:6px;padding:8px 10px;text-align:left;color:#0f6cbd;box-shadow:0 1px 2px rgba(0,0,0,.12);margin:0 2px 8px}
+.addt:hover{background:#f8f8f8}
+.cards{overflow-y:auto;min-height:60px;padding:2px 2px 40px;flex:1}
+.card{background:#fff;border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,.14);padding:10px 12px 8px;margin-bottom:8px;cursor:pointer;border:1px solid transparent;position:relative}
+.card:hover{box-shadow:0 3px 8px rgba(0,0,0,.18)}
+.card.sel{border-color:#0f6cbd}
+.card.dragging{opacity:.35}
+.dropph{height:6px;background:#0f6cbd;border-radius:3px;margin:2px 0 8px}
+.ct{font-weight:500;line-height:1.4;word-break:break-word;margin-bottom:6px}
+.lbls{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+.lchip{font-size:11px;padding:1px 8px;border-radius:10px;font-weight:600;white-space:nowrap}
+.cmeta{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:#605e5c;align-items:center}
+.cmeta .late{background:#fde7e9;color:#a4262c;padding:1px 6px;border-radius:4px;font-weight:600}
+.cmeta .soon{color:#8a5a00;font-weight:600}
+.cfoot{display:flex;align-items:center;margin-top:6px;min-height:22px}
+.cfoot .ib{visibility:hidden}
+.card:hover .cfoot .ib{visibility:visible}
+.cfoot .sp{flex:1}
+.cfoot{flex-wrap:wrap;row-gap:4px}
+.cbtn{border:none;background:transparent;font-size:12px;color:#8a8886;padding:2px 5px;border-radius:4px;white-space:nowrap}
+.cbtn:hover{background:#edebe9;color:#242424}
+.ct-row{display:flex;gap:8px;align-items:flex-start}
+.ct-row .ct{flex:1}
+.chk{width:18px;height:18px;border-radius:50%;border:1.5px solid #8a8886;background:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;line-height:1;color:transparent;flex-shrink:0;padding:0;margin-top:1px;cursor:pointer}
+.chk:hover{border-color:#107c10;color:#107c10}
+.chk.on{background:#107c10;border-color:#107c10;color:#fff}
+.chk.big{width:22px;height:22px;font-size:13px;margin-top:9px}
+.card.done .ct,.done-t{color:#8a8886;text-decoration:line-through}
+.card.done .lbls,.card.done .cmeta{opacity:.6}
+.pn-trow{display:flex;gap:6px;align-items:flex-start}
+.pn-trow.done .pn-title{color:#8a8886;text-decoration:line-through}
+.pn-del{margin-top:14px}
+.trash-i{flex:1;cursor:pointer;padding:2px 4px;border-radius:4px}
+.trash-i:hover{background:#f3f2f1}
+.newtask{background:#fff;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.2);padding:8px;margin:0 2px 8px}
+.newtask input{width:100%}
+.nt-btns{display:flex;gap:6px;margin-top:6px}
+.add-col{padding-top:4px}
+.addb{color:#0f6cbd;padding:8px 6px;cursor:pointer;font-weight:600}
+.empty{color:#8a8886;padding:40px;text-align:center}
+/* grid */
+.gridwrap{padding:14px 18px}
+table.grid{border-collapse:collapse;width:100%;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.grid th{background:#faf9f8;text-align:left;font-weight:600;font-size:12px;color:#605e5c;padding:9px 10px;border-bottom:1px solid #e1dfdd;cursor:pointer;white-space:nowrap;user-select:none}
+.grid th:hover{background:#f3f2f1}
+.grid td{padding:8px 10px;border-bottom:1px solid #f3f2f1;vertical-align:middle}
+.grid tr.row{cursor:pointer}
+.grid tr.row:hover td{background:#f5f9fd}
+.grid .late{color:#a4262c;font-weight:600}
+.grid td.ttl{font-weight:500;max-width:340px}
+/* schedule */
+.cal-wrap{display:flex;gap:14px;padding:14px 18px;height:100%}
+.cal{flex:1;display:flex;flex-direction:column;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.12);min-width:0}
+.cal-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #e1dfdd}
+.cal-h .m{font-size:16px;font-weight:600;min-width:120px}
+.cal-g{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;flex:1;min-height:0}
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);font-size:12px;color:#605e5c;border-bottom:1px solid #e1dfdd}
+.cal-dow div{padding:6px 8px}
+.cal-d{border-right:1px solid #f3f2f1;border-bottom:1px solid #f3f2f1;padding:4px;overflow:hidden;min-height:0;display:flex;flex-direction:column}
+.cal-d.other{background:#faf9f8;color:#a19f9d}
+.cal-d .dn{font-size:12px;padding:2px 4px}
+.cal-d.today .dn{background:#0f6cbd;color:#fff;border-radius:10px;display:inline-block;align-self:flex-start}
+.cal-d.over,.nodue.over{background:#deecf9}
+.cal-items{overflow-y:auto;flex:1}
+.chip{font-size:12px;background:#deecf9;border-left:3px solid #0f6cbd;padding:2px 6px;border-radius:3px;margin:2px 0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip.late{background:#fde7e9;border-color:#d13438}
+.chip.done{text-decoration:line-through;color:#8a8886;background:#f3f2f1;border-color:#a19f9d}
+.nodue{width:230px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.12);padding:10px;overflow-y:auto;flex-shrink:0}
+.nodue h4{margin:0 0 8px;font-size:13px}
+/* panel */
+#panel{position:fixed;top:0;right:0;height:100vh;width:480px;background:#fff;box-shadow:-6px 0 24px rgba(0,0,0,.16);z-index:40;transform:translateX(105%);transition:transform .18s;display:flex;flex-direction:column}
+#panel.open{transform:none}
+.pn-h{display:flex;align-items:center;gap:4px;padding:10px 12px;border-bottom:1px solid #e1dfdd}
+.crumb{font-size:12px;color:#605e5c;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pn-b{flex:1;overflow-y:auto;padding:14px 18px 30px}
+.pn-title{width:100%;font-size:18px;font-weight:600;border-color:transparent;padding:6px 8px}
+.pn-title:hover{border-color:#d1d1d1}
+.row{margin-top:16px;position:relative}
+.row>label,.lbl{display:block;font-size:12px;font-weight:600;color:#605e5c;margin-bottom:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.achip{display:inline-flex;align-items:center;gap:5px;background:#f3f2f1;border-radius:14px;padding:2px 4px 2px 2px;font-size:13px}
+.achip .x,.lchip .x{border:none;background:transparent;padding:0 4px;cursor:pointer;color:inherit;opacity:.6}
+.achip .x:hover,.lchip .x:hover{opacity:1}
+.addchip{border:1px dashed #a19f9d;background:#fff;border-radius:14px;padding:3px 10px;font-size:12px;color:#605e5c}
+.addchip:hover{border-color:#0f6cbd;color:#0f6cbd}
+.pop{position:absolute;z-index:5;left:0;top:100%;background:#fff;border:1px solid #e1dfdd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;width:280px;max-height:320px;overflow:auto;margin-top:4px}
+.popi{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:4px;cursor:pointer}
+.popi:hover{background:#f3f2f1}
+.popdate{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.popdate .pdl{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#605e5c}
+.dfield{position:relative;display:flex;align-items:stretch;width:100%}
+.dfield .dtext{flex:1;min-width:0;width:100%;border-top-right-radius:0;border-bottom-right-radius:0;font-weight:400}
+.dfield .dtext.bad{border-color:#d13438;box-shadow:0 0 0 1px #d13438;background:#fdf3f4}
+.dfield .dpick{border:1px solid #d1d1d1;border-left:none;background:#fff;border-radius:0 4px 4px 0;padding:0 7px;font-size:13px}
+.dfield .dpick:hover{background:#f3f2f1}
+.dfield .dhid{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;padding:0;border:0;pointer-events:none}
+.popnew{display:flex;gap:4px;border-top:1px solid #edebe9;margin-top:6px;padding-top:8px}
+.popnew input{flex:1;min-width:0}
+.grid3{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;margin-top:16px}
+.grid3 select,.grid3 input{width:100%}
+textarea{width:100%;resize:vertical}
+.cl-i{display:flex;align-items:center;gap:6px;padding:2px 0}
+.cl-i input[type=text]{flex:1;border-color:transparent}
+.cl-i input[type=text]:hover{border-color:#d1d1d1}
+.cl-i.done input[type=text]{text-decoration:line-through;color:#8a8886}
+.cl-add{width:100%;margin-top:4px}
+.ln-i{display:flex;align-items:center;gap:6px;padding:3px 0}
+.ln-i a{flex:1;color:#0f6cbd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.linkadd{display:grid;grid-template-columns:1fr 120px auto;gap:6px;margin-top:6px}
+.cmt{background:#faf9f8;border-radius:6px;padding:8px 10px;margin-top:8px}
+.cmt-h{display:flex;align-items:center;gap:6px;font-size:12px;color:#605e5c;margin-bottom:4px}
+.cmt-h b{color:#242424}
+.cmt-b{white-space:pre-wrap;word-break:break-word}
+.pn-foot{margin-top:22px;font-size:12px;color:#8a8886;border-top:1px solid #edebe9;padding-top:10px;line-height:1.7}
+.linkbtn{border:none;background:none;color:#0f6cbd;padding:0;text-decoration:underline}
+/* menus & modal */
+#cpop{position:fixed;z-index:60;display:none;margin-top:0;top:0;left:0}
+.addchip.csm{font-size:11px;padding:1px 8px;margin-left:4px}
+#ctx{position:fixed;z-index:100;background:#fff;border:1px solid #e1dfdd;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px 0;min-width:170px;display:none}
+.mi{padding:7px 14px;cursor:pointer;white-space:nowrap}
+.mi:hover{background:#f3f2f1}
+.mi.danger{color:#a4262c}
+.sep{height:1px;background:#edebe9;margin:4px 0}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:90;display:none;align-items:center;justify-content:center}
+#modal.open{display:flex}
+.mbox{background:#fff;border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.25);width:520px;max-width:94vw;max-height:86vh;display:flex;flex-direction:column}
+.mbox.wide{width:980px}
+.mh{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid #edebe9;font-weight:600;font-size:16px}
+.mh .ib{margin-left:auto}
+.mb{padding:14px 18px;overflow:auto}
+.mrow{display:flex;gap:8px;align-items:center;padding:4px 0}
+.mrow input[type=text]{flex:1}
+.hist{border-collapse:collapse;width:100%;font-size:13px}
+.hist th{background:#faf9f8;text-align:left;padding:7px 8px;border-bottom:1px solid #e1dfdd;white-space:nowrap;position:sticky;top:-14px}
+.hist td{padding:7px 8px;border-bottom:1px solid #f3f2f1;vertical-align:top;word-break:break-word}
+.hist .from{color:#a4262c}.hist .to{color:#107c10}
+.muted{color:#8a8886;font-size:12px}
+.tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:3px;background:#f3f2f1;font-weight:600}
+.tag.c{background:#dff6dd;color:#107c10}.tag.m{background:#deecf9;color:#0f548c}.tag.d{background:#fde7e9;color:#a4262c}.tag.r{background:#fff4ce;color:#835b00}.tag.k{background:#efe6fa;color:#5c2e91}
+/* start */
+.start{display:flex;align-items:center;justify-content:center;height:100vh;width:100%}
+.start-box{background:#fff;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.12);padding:34px 38px;width:560px;max-width:94vw}
+.start-box h1{margin:0 0 6px;color:#0f6cbd;font-size:24px}
+.start-box p{color:#424242;line-height:1.6}
+.start-box .btn{display:block;width:100%;padding:10px;margin-top:10px;font-size:15px}
+.hint{margin-top:18px;font-size:12px;color:#605e5c;line-height:1.7;background:#faf9f8;border-radius:6px;padding:10px 12px}
+.warn{background:#fde7e9;color:#a4262c;border-radius:6px;padding:10px 12px;margin-top:12px;font-size:13px}
+.start-box .sub{font-size:13px;color:#605e5c;margin:16px 0 4px;font-weight:600}
+.start-box input.full{width:100%;margin-top:6px;padding:9px 10px}
+.acct{display:flex;align-items:center;gap:8px;font-size:13px;color:#424242;background:#f3f2f1;border-radius:6px;padding:8px 10px;margin-top:8px}
+.acct .linkbtn{margin-left:auto}
+.status.auth .dot{background:#d13438}.status.auth{color:#a4262c}
+.status .btn{margin-top:6px;padding:3px 10px;font-size:12px}
+.mnav{display:none;font-size:20px;padding:2px 8px}
+/* 휴대폰 화면 */
+@media (hover:none){ .cfoot .ib{visibility:visible} }
+@supports (height:100dvh){ body,#app,.start,#panel{height:100dvh} }
+@media (max-width:760px){
+  input,select,textarea{font-size:16px}
+  .mnav{display:inline-block}
+  #nav{position:fixed;left:0;top:0;bottom:0;z-index:85;width:264px;transform:translateX(-105%);transition:transform .18s;box-shadow:6px 0 24px rgba(0,0,0,.2);overflow-y:auto}
+  body.navopen #nav{transform:none}
+  body.navopen #main::after{content:'';position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:84}
+  .ph{padding:6px 10px 0}
+  .ph-top{gap:6px}
+  .ptitle{font-size:16px;max-width:calc(100vw - 130px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pdot.big{width:28px;height:28px;font-size:13px}
+  .tabs{margin-left:0;order:3;width:100%}
+  .tab{padding:8px 10px 7px}
+  .ph-right{margin-left:0;order:4;width:100%;flex-wrap:wrap;gap:6px;padding:4px 0 8px}
+  .ph-right .ib{margin-left:auto}
+  .search{flex:1 1 100%;width:auto;min-width:0}
+  .fpanel{left:8px;right:8px;width:auto}
+  .board{padding:10px 10px 0;gap:10px;scroll-snap-type:x mandatory}
+  .col{width:calc(100vw - 40px);scroll-snap-align:center}
+  .gridwrap{padding:10px;overflow-x:auto}
+  .cal-wrap{flex-direction:column;padding:10px;gap:10px}
+  .nodue{width:auto;max-height:28vh}
+  .cal-d .chip{font-size:11px;padding:1px 3px}
+  #panel{width:100vw}
+  .pn-b{padding:12px 14px 30px}
+  .grid3{grid-template-columns:1fr 1fr}
+  .grid3>:first-child{grid-column:1 / -1}
+  .linkadd{grid-template-columns:1fr}
+  .mbox,.mbox.wide{width:100vw;max-width:100vw;max-height:92vh;border-radius:10px 10px 0 0;align-self:flex-end}
+  .start-box{padding:22px 18px}
+  #cpop{max-width:calc(100vw - 16px)}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<aside id="panel"></aside>
+<div id="ctx"></div>
+<div id="cpop" class="pop"></div>
+<div id="modal"></div>
+<script>
+'use strict';
+/* =========================================================
+   팀 플래너 — 단일 HTML. 데이터는 공유 폴더의 planner_data.json
+   병합 규칙: 엔터티의 필드별 수정시각(_v)이 늦은 값을 채택
+   ========================================================= */
+const FILE = 'planner_data.json';
+const LS_KEY = 'teamPlanner.localDb', LS_USER = 'teamPlanner.user', LS_UI = 'teamPlanner.ui';
+const COLLS = ['plans','buckets','tasks','labels','members','comments','history'];
+const LABEL_COLORS = [['분홍','#f6d3e6','#9b1d61'],['빨강','#fbd5d5','#a4262c'],['노랑','#fff1c2','#835b00'],['초록','#d7efd2','#2d6a24'],['파랑','#d0e7f8','#0f548c'],['보라','#e5dcf5','#5c2e91'],['청동','#f2dccb','#8a4b21'],['라임','#e8f5c8','#4b6a00'],['아쿠아','#cdeff2','#00666e'],['회색','#e1e1e1','#484644'],['은색','#e9edf0','#5a6670'],['갈색','#ead7cc','#6b3e26'],['크랜베리','#f3c6cf','#8e1937'],['주황','#fde0c8','#a1460c'],['복숭아','#fde3d9','#a9441f'],['금잔화','#fde9b8','#8a5a00'],['연초록','#e0f4d9','#3a7d2a'],['진초록','#c7e0c4','#1e4d1a'],['청록','#c8ebe6','#00594f'],['연파랑','#dbeefc','#1d5f99'],['진파랑','#c5d4ec','#1b3a73'],['라벤더','#ece3fa','#5b3c96'],['자두','#ecd0e5','#6e1f5a'],['연회색','#f0f0f0','#605e5c'],['진회색','#cfcfcf','#323130']];
+const AV_COLORS = ['#0f6cbd','#c239b3','#038387','#8764b8','#ca5010','#498205','#d13438','#4f6bed','#986f0b','#005b70','#7a7574','#e3008c'];
+const FIELD_NAMES = {title:'제목',bucketId:'버킷',assignees:'담당자',labels:'레이블',start:'시작일',due:'마감일',notes:'메모'};
+const DUE_GROUPS = [{k:'late',t:'지연',nodrop:true},{k:'today',t:'오늘'},{k:'tomorrow',t:'내일'},{k:'week',t:'이번 주'},{k:'next',t:'다음 주'},{k:'later',t:'나중에',nodrop:true},{k:'none',t:'날짜 없음'}];
+
+/* ---------- utils ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2,'0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today = () => ymd(new Date());
+const parseD = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+const addDays = (s,n) => { const d = parseD(s); d.setDate(d.getDate()+n); return ymd(d); };
+const endOfWeek = s => addDays(s, 6 - parseD(s).getDay());
+const fmtTs = t => { if(!t) return ''; const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const fmtD = s => s ? `${Number(s.slice(5,7))}/${Number(s.slice(8,10))}` : '';
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+let _last = 0;
+const now = () => { let t = Date.now(); if (t <= _last) t = _last + 1; _last = t; return t; };
+const hash = s => { let h = 0; for (const c of String(s)) h = (h*31 + c.charCodeAt(0)) | 0; return Math.abs(h); };
+const same = (a,b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/* ---------- state ---------- */
+const S = {
+  db: emptyDb(), mode: null, dir: null, fh: null, savedDir: null, g: {}, gErr: '', gBusy: false,
+  user: localStorage.getItem(LS_USER) || null,
+  lastLm: 0, dirty: false, saving: false, saveAgain: false, saveTimer: null, lastBackup: null,
+  status: {kind:'ok', msg:''}, drag: null, renderPending: false, panelPending: false, modal: null, menuItems: [],
+  ui: Object.assign({planId:null, view:'board', groupBy:'bucket', sort:{k:'due',dir:1}, calMonth:today().slice(0,7), showDone:true}, JSON.parse(localStorage.getItem(LS_UI) || '{}'),
+    {filters:{text:'',assignees:[],labels:[],due:[],buckets:[]}, fltOpen:false, openTaskId:null, pop:null, addingIn:null, addingBucket:false})
+};
+function saveUi(){ const {planId,view,groupBy,sort,calMonth,showDone} = S.ui; localStorage.setItem(LS_UI, JSON.stringify({planId,view,groupBy,sort,calMonth,showDone})); }
+
+/* ---------- data model & merge ---------- */
+function emptyDb(){ const d = {schema:1}; COLLS.forEach(c => d[c] = {}); return d; }
+function normDb(d){ d = d || {}; const o = {schema:1}; COLLS.forEach(c => o[c] = (d[c] && typeof d[c]==='object') ? d[c] : {}); return o; }
+function mergeEnt(a, b){
+  const va = a._v || {}, vb = b._v || {}, r = {id: a.id || b.id, _v:{}};
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]); keys.delete('_v'); keys.delete('id');
+  for (const k of keys){
+    const ta = va[k] || 0, tb = vb[k] || 0;
+    if (tb > ta || (tb === ta && !(k in a))) { r[k] = b[k]; r._v[k] = tb; } else { r[k] = a[k]; r._v[k] = ta; }
+  }
+  return r;
+}
+function merge(a, b){
+  const r = {schema:1};
+  for (const c of COLLS){
+    const A1 = a[c] || {}, B1 = b[c] || {}; r[c] = {};
+    for (const id of new Set([...Object.keys(A1), ...Object.keys(B1)])){
+      const pa = A1[id]?.purged, pb = B1[id]?.purged;   // 영구 삭제(보관기간 경과) 표식은 항상 우선
+      if (pa || pb){ r[c][id] = JSON.parse(JSON.stringify(pa ? A1[id] : B1[id])); continue; }
+      r[c][id] = (A1[id] && B1[id]) ? mergeEnt(A1[id], B1[id]) : JSON.parse(JSON.stringify(A1[id] || B1[id]));
+    }
+  }
+  return r;
+}
+function create(c, obj){
+  const t = now();
+  const e = Object.assign({id: uid()}, obj, {deleted:false, createdBy:S.user, createdAt:Date.now()});
+  e._v = {}; for (const k of Object.keys(e)) if (k !== 'id' && k !== '_v') e._v[k] = t;
+  S.db[c][e.id] = e; markDirty(); return e;
+}
+function setF(c, id, f, v){ const e = S.db[c][id]; if (!e) return; e[f] = v; e._v = e._v || {}; e._v[f] = now(); markDirty(); }
+
+const act = c => Object.values(S.db[c]).filter(x => !x.deleted);
+const plans = () => act('plans').sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+const buckets = pid => act('buckets').filter(b => b.planId === pid).sort((a,b) => (a.order||0) - (b.order||0));
+const labelsOf = pid => act('labels').filter(l => l.planId === pid).sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+const members = () => act('members').sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+const tasksOf = pid => act('tasks').filter(t => t.planId === pid);
+const isMember = id => S.db.members[id] && !S.db.members[id].deleted;
+const isLabel = id => S.db.labels[id] && !S.db.labels[id].deleted;
+const memberName = id => S.db.members[id]?.name || '(알 수 없음)';
+const myName = () => S.db.members[S.user]?.name || '익명';
+const curPlan = () => { const p = S.db.plans[S.ui.planId]; return p && !p.deleted ? p : null; };
+function effBucket(t){ const b = S.db.buckets[t.bucketId]; if (b && !b.deleted && b.planId === t.planId) return b.id; return buckets(t.planId)[0]?.id || null; }
+
+/* ---------- history ---------- */
+function logH(taskId, action, field, from, to){
+  create('history', {taskId, planId: S.db.tasks[taskId]?.planId || '', ts: Date.now(), user: S.user, userName: myName(), action, field, from: String(from ?? ''), to: String(to ?? '')});
+}
+function fmtVal(f, v){
+  switch (f){
+    case 'assignees': return (v||[]).map(memberName).join(', ');
+    case 'labels': return (v||[]).map(id => S.db.labels[id]?.name || '?').join(', ');
+    case 'bucketId': return S.db.buckets[v]?.name || '';
+    case 'notes': { const s = v || ''; return s.length > 300 ? s.slice(0,300) + '…' : s; }
+    default: return v ?? '';
+  }
+}
+function touch(id){ setF('tasks', id, 'updatedBy', S.user); setF('tasks', id, 'updatedAt', Date.now()); }
+function updateTask(id, f, v, o = {}){
+  const t = S.db.tasks[id]; if (!t) return false;
+  const old = t[f]; if (same(old, v)) return false;
+  setF('tasks', id, f, v); touch(id);
+  if (!o.noLog) logH(id, f === 'bucketId' ? '이동' : '수정', FIELD_NAMES[f] || f, fmtVal(f, old), fmtVal(f, v));
+  if (!o.noRender) render();
+  return true;
+}
+
+/* ---------- storage ---------- */
+function idb(){ return new Promise((res, rej) => { const r = indexedDB.open('teamPlanner', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function idbGet(k){ try { const db = await idb(); return await new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); } catch(e){ return null; } }
+async function idbSet(k, v){ try { const db = await idb(); await new Promise((res, rej) => { const tx = db.transaction('kv','readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); } catch(e){} }
+
+async function readJson(fh){
+  const f = await fh.getFile(); const txt = await f.text();
+  return {lm: f.lastModified, data: txt.trim() ? JSON.parse(txt) : emptyDb()};
+}
+async function scanConflicts(){
+  const list = [];
+  for await (const [name, h] of S.dir.entries()){
+    if (h.kind === 'file' && name !== FILE && /^planner_data.*\.json$/i.test(name)) list.push({name, h});
+  }
+  return list;
+}
+async function pullRemote(){
+  const r = await readJson(S.fh);             // JSON 오류 시 예외 → 덮어쓰지 않음
+  let remote = normDb(r.data);
+  const conf = await scanConflicts();
+  for (const c of conf){ try { remote = merge(remote, normDb((await readJson(c.h)).data)); } catch(e){} }
+  return {remote, lm: r.lm, conf};
+}
+function markDirty(){ S.dirty = true; scheduleSave(); }
+function scheduleSave(){ clearTimeout(S.saveTimer); S.saveTimer = setTimeout(saveNow, 700); }
+async function saveNow(){
+  if (!S.mode) return;
+  if (S.mode === 'local'){ localStorage.setItem(LS_KEY, JSON.stringify(S.db)); S.dirty = false; setStatus('local'); return; }
+  if (S.saving){ S.saveAgain = true; return; }
+  S.saving = true; setStatus('saving');
+  try {
+    if (S.mode === 'graph') await gSave();
+    else {
+      const {remote, conf} = await pullRemote();
+      S.db = merge(S.db, remote);
+      const w = await S.fh.createWritable(); await w.write(JSON.stringify(S.db)); await w.close();
+      for (const c of conf){ try { await S.dir.removeEntry(c.name); } catch(e){} }
+      S.lastLm = (await S.fh.getFile()).lastModified;
+    }
+    S.dirty = false; setStatus('ok');
+    dailyBackup();
+  } catch(e){
+    if (e.auth) setStatus('auth', e.message);
+    else { setStatus('err', e.message || String(e)); setTimeout(scheduleSave, 5000); }
+  }
+  S.saving = false;
+  if (S.saveAgain){ S.saveAgain = false; saveNow(); }
+}
+async function dailyBackup(){
+  const d = today().replace(/-/g,''); if (S.lastBackup === d) return;
+  if (S.mode === 'graph'){ try { await gBackup(`planner_data_${d}.json`); S.lastBackup = d; } catch(e){} return; }
+  try {
+    const bd = await S.dir.getDirectoryHandle('backup', {create:true}); const name = `planner_data_${d}.json`;
+    try { await bd.getFileHandle(name); } catch(e){ const h = await bd.getFileHandle(name, {create:true}); const w = await h.createWritable(); await w.write(JSON.stringify(S.db)); await w.close(); }
+    S.lastBackup = d;
+  } catch(e){}
+}
+async function poll(force){
+  if (S.mode === 'graph'){
+    if (S.saving || S.drag || S.status.kind === 'auth') return;
+    if (!force && (document.visibilityState !== 'visible' || Date.now() - (S.g.polledAt || 0) < 7500)) return;
+    S.g.polledAt = Date.now();
+    try {
+      const {remote, etag, conf} = await gPull(false);
+      const before = JSON.stringify(S.db);
+      S.db = merge(S.db, remote); S.g.etag = etag;
+      if (conf.length){ S.g.confAt = 0; scheduleSave(); }   // 저장할 때 충돌 사본을 다시 합치고 지움
+      if (JSON.stringify(S.db) !== before){ gCacheSave(); render(); }
+      if (S.status.kind === 'err' && !S.dirty) setStatus('ok');
+    } catch(e){ e.auth ? setStatus('auth', e.message) : setStatus('err', e.message || String(e)); }
+    return;
+  }
+  if (S.mode !== 'file' || S.saving || S.drag) return;
+  try {
+    const f = await S.fh.getFile(); const conf = await scanConflicts();
+    if (f.lastModified !== S.lastLm || conf.length){
+      const {remote, lm} = await pullRemote();
+      const before = JSON.stringify(S.db);
+      S.db = merge(S.db, remote); S.lastLm = lm;
+      if (conf.length) scheduleSave();
+      if (JSON.stringify(S.db) !== before) render();
+    }
+    if (S.status.kind === 'err' && !S.dirty) setStatus('ok');
+  } catch(e){ setStatus('err', e.message || String(e)); }
+}
+function setStatus(kind, msg){
+  S.status = {kind, msg: msg || '', at: Date.now()};
+  const el = $('#status'); if (el){ el.className = 'status ' + kind; el.innerHTML = statusHtml(); }
+}
+function statusHtml(){
+  const s = S.status;
+  if (S.mode === 'local') return `<span class="dot"></span>체험 모드 — 이 PC 브라우저에만 저장`;
+  const where = S.mode === 'graph' ? `☁ ${esc(S.g.name)}` : S.dir ? `📁 ${esc(S.dir.name)}` : '';
+  if (s.kind === 'auth') return `<span class="dot"></span>로그인이 만료되어 저장을 멈췄습니다. 수정한 내용은 이 기기에 보관 중입니다.<br><button class="btn primary" data-act="ms-relogin">다시 로그인</button>`;
+  if (s.kind === 'saving') return `<span class="dot"></span>저장 중…<br>${where}`;
+  if (s.kind === 'err') return `<span class="dot"></span>저장·동기화 오류: ${esc(s.msg)}<br>5초 후 다시 시도합니다.<br>${where}`;
+  return `<span class="dot"></span>동기화됨 ${s.at ? fmtTs(s.at).slice(11) : ''}<br>${where}`;
+}
+
+/* =========================================================
+   Microsoft 계정 모드 — OneDrive 파일을 Microsoft Graph로 직접 읽고 씀
+   (휴대폰·PC 브라우저 공통. 로그인은 OAuth 2.0 인증 코드 + PKCE, 비밀키 없음)
+   ========================================================= */
+const MS = {
+  clientId: '',                 // ← Azure '앱 등록'의 애플리케이션(클라이언트) ID를 넣으세요
+  tenant: 'consumers',          // 개인 Microsoft 계정. 회사 계정도 함께 쓰려면 'common'
+  scopes: 'Files.ReadWrite.All User.Read offline_access'
+};
+const GRAPH = 'https://graph.microsoft.com/v1.0';
+const LS_TOK = 'teamPlanner.msToken', LS_GF = 'teamPlanner.gFolder', LS_GCACHE = 'teamPlanner.gCache', SS_PKCE = 'teamPlanner.pkce', SS_SILENT = 'teamPlanner.silentTried';
+const msSecure = () => location.protocol === 'https:' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const msReady = () => !!MS.clientId && msSecure() && !!window.crypto?.subtle;
+const msRedirect = () => location.origin + location.pathname.replace(/index\.html$/i, '');
+const msAuthUrl = p => `https://login.microsoftonline.com/${MS.tenant}/oauth2/v2.0/${p}`;
+const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const lsJson = k => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch(e){ return null; } };
+const msTok = () => lsJson(LS_TOK);
+const gFolder = () => lsJson(LS_GF);
+
+async function msLogin(silent){
+  gCacheSave();                                   // 로그인 화면으로 넘어가도 수정 내용이 남도록
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+  const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
+  sessionStorage.setItem(SS_PKCE, JSON.stringify({verifier, state, silent: !!silent}));
+  const p = new URLSearchParams({client_id: MS.clientId, response_type: 'code', redirect_uri: msRedirect(), scope: MS.scopes,
+    code_challenge: challenge, code_challenge_method: 'S256', state, response_mode: 'query'});
+  const hint = msTok()?.hint;
+  if (silent){ p.set('prompt', 'none'); if (hint) p.set('login_hint', hint); } else p.set('prompt', 'select_account');
+  location.assign(msAuthUrl('authorize') + '?' + p);
+}
+async function msTokenReq(params){
+  const body = new URLSearchParams(Object.assign({client_id: MS.clientId, scope: MS.scopes}, params));
+  const r = await fetch(msAuthUrl('token'), {method: 'POST', body});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error_description || j.error || ('HTTP ' + r.status)), {auth: true});
+  const old = msTok() || {};
+  const tok = {at: j.access_token, exp: Date.now() + ((j.expires_in || 3600) - 120) * 1000, rt: j.refresh_token || old.rt, hint: old.hint || '', name: old.name || ''};
+  localStorage.setItem(LS_TOK, JSON.stringify(tok)); return tok;
+}
+/* 로그인 화면에서 돌아왔을 때(주소에 ?code=) 토큰 교환 */
+async function msHandleRedirect(){
+  const q = new URLSearchParams(location.search);
+  if (!q.has('code') && !q.has('error')) return null;
+  const pk = lsJsonS(SS_PKCE); sessionStorage.removeItem(SS_PKCE);
+  history.replaceState(null, '', msRedirect());
+  if (!pk || q.get('state') !== pk.state) return {err: '로그인 확인 값이 맞지 않습니다. 다시 로그인해 주세요.'};
+  if (q.has('error')) return {err: q.get('error_description') || q.get('error'), silent: pk.silent};
+  await msTokenReq({grant_type: 'authorization_code', code: q.get('code'), redirect_uri: msRedirect(), code_verifier: pk.verifier});
+  try { const me = await gjson('/me?$select=displayName,userPrincipalName,mail'); const t = msTok(); t.name = me.displayName || ''; t.hint = me.userPrincipalName || me.mail || ''; localStorage.setItem(LS_TOK, JSON.stringify(t)); } catch(e){}
+  return {ok: true};
+}
+function lsJsonS(k){ try { return JSON.parse(sessionStorage.getItem(k) || 'null'); } catch(e){ return null; } }
+async function msToken(){
+  const t = msTok();
+  if (t?.at && t.exp > Date.now()) return t.at;
+  if (t?.rt){ try { return (await msTokenReq({grant_type: 'refresh_token', refresh_token: t.rt})).at; } catch(e){} }
+  throw Object.assign(new Error('로그인이 만료되었습니다.'), {auth: true});
+}
+function msLogout(){
+  if (S.dirty && !confirm('아직 저장되지 않은 변경이 있습니다. 그래도 로그아웃할까요?')) return;
+  [LS_TOK, LS_GF, LS_GCACHE].forEach(k => localStorage.removeItem(k));
+  S.mode = null; S.g = {}; S.db = emptyDb(); S.gErr = ''; render();
+}
+
+/* ---------- Graph 호출 ---------- */
+function gErr(r, txt){ let m = ''; try { m = JSON.parse(txt).error.message; } catch(e){} const e = new Error(`${r.status}${m ? ' ' + m : ''}`); e.status = r.status; if (r.status === 401) e.auth = true; return e; }
+async function gfetch(path, o = {}){
+  let r;
+  for (let i = 0; i < 4; i++){
+    const at = await msToken();
+    r = await fetch(/^https:/.test(path) ? path : GRAPH + path, Object.assign({}, o, {headers: Object.assign({Authorization: 'Bearer ' + at}, o.headers || {})}));
+    if (r.status === 401 && i === 0){ const t = msTok(); if (t){ t.exp = 0; localStorage.setItem(LS_TOK, JSON.stringify(t)); } continue; }
+    if ([429, 503, 504].includes(r.status) && i < 3){ await new Promise(s => setTimeout(s, Math.min(10, Number(r.headers.get('Retry-After')) || 2) * 1000)); continue; }
+    break;
+  }
+  return r;
+}
+async function gjson(path, o){ const r = await gfetch(path, o); const txt = await r.text(); if (!r.ok) throw gErr(r, txt); return txt ? JSON.parse(txt) : {}; }
+const encPath = p => p.split('/').map(encodeURIComponent).join('/');
+const gBase = () => `/drives/${S.g.driveId}/items/${S.g.folderId}`;
+async function gMeta(rel){ const r = await gfetch(`${gBase()}:/${encPath(rel)}`); const txt = await r.text(); if (r.status === 404) return null; if (!r.ok) throw gErr(r, txt); return JSON.parse(txt); }
+async function gDownload(meta){
+  let u = meta['@microsoft.graph.downloadUrl'];
+  if (!u){ const m = await gjson(`/drives/${meta.parentReference?.driveId || S.g.driveId}/items/${meta.id}`); u = m['@microsoft.graph.downloadUrl']; }
+  const r = await fetch(u, {cache: 'no-store'}); const txt = await r.text();
+  if (!r.ok) throw new Error('파일을 받지 못했습니다 (' + r.status + ')');
+  return txt.trim() ? JSON.parse(txt) : emptyDb();      // JSON 오류 시 예외 → 덮어쓰지 않음
+}
+/* 폴더 찾기: ① 공유 링크 ② 내 OneDrive 안의 경로(바로 가기 폴더도 따라감) */
+async function gResolve(input){
+  input = input.trim().replace(/^["']|["']$/g, '');
+  let it;
+  if (/^https?:\/\//i.test(input)){
+    const id = 'u!' + b64url(new TextEncoder().encode(input));
+    it = await gjson(`/shares/${id}/driveItem`, {headers: {Prefer: 'redeemSharingLink'}});
+  } else {
+    const segs = input.replace(/\\/g, '/').split('/').map(s => s.trim()).filter(Boolean);
+    if (!segs.length) throw new Error('경로를 입력해 주세요.');
+    let cur = '/me/drive/root';
+    for (const s of segs){
+      it = await gjson(`${cur}:/${encodeURIComponent(s)}`).catch(e => { throw e.status === 404 ? new Error(`‘${s}’ 폴더를 찾지 못했습니다.`) : e; });
+      const ri = it.remoteItem;
+      cur = ri ? `/drives/${ri.parentReference.driveId}/items/${ri.id}` : `/drives/${it.parentReference.driveId}/items/${it.id}`;
+    }
+  }
+  const ri = it.remoteItem;
+  let driveId = ri ? ri.parentReference.driveId : it.parentReference.driveId, folderId = ri ? ri.id : it.id, name = it.name;
+  if (!(ri ? ri.folder : it.folder)){                    // 파일 링크를 넣은 경우 그 파일이 든 폴더
+    const pr = (ri || it).parentReference; driveId = pr.driveId; folderId = pr.id;
+    name = (await gjson(`/drives/${driveId}/items/${folderId}?$select=name`)).name;
+  }
+  return {driveId, folderId, name};
+}
+async function gConflicts(){
+  const j = await gjson(`${gBase()}/children?$select=id,name,file&$top=999`);
+  return (j.value || []).filter(x => x.file && x.name !== FILE && /^planner_data.*\.json$/i.test(x.name));
+}
+/* 원격 파일 읽기. 마지막으로 읽거나 쓴 뒤 바뀌지 않았으면(eTag 동일) 내려받지 않음 */
+async function gPull(forceConf){
+  const meta = await gMeta(FILE);
+  let remote = emptyDb(); const etag = meta ? meta.eTag : null;
+  if (meta && etag !== S.g.etag) remote = normDb(await gDownload(meta));
+  let conf = [];
+  if (forceConf || Date.now() - (S.g.confAt || 0) > 60000){
+    S.g.confAt = Date.now();
+    try { conf = await gConflicts(); } catch(e){}
+    for (const c of conf){ try { remote = merge(remote, normDb(await gDownload(c))); } catch(e){} }
+  }
+  return {remote, etag, conf};
+}
+/* 저장: 읽기 → 병합 → eTag가 그대로일 때만 쓰기(If-Match). 그 사이 누가 저장했으면 다시 읽어 병합 */
+async function gSave(){
+  gCacheSave();
+  for (let i = 0; ; i++){
+    const {remote, etag, conf} = await gPull(i === 0 ? false : true);
+    S.db = merge(S.db, remote);
+    const q = etag ? '' : '?@microsoft.graph.conflictBehavior=fail';
+    const r = await gfetch(`${gBase()}:/${encPath(FILE)}:/content${q}`, {method: 'PUT',
+      headers: Object.assign({'Content-Type': 'application/json'}, etag ? {'If-Match': etag} : {}), body: JSON.stringify(S.db)});
+    const txt = await r.text();
+    if ((r.status === 412 || r.status === 409) && i < 5){ S.g.etag = '__stale__'; continue; }
+    if (!r.ok) throw gErr(r, txt);
+    S.g.etag = JSON.parse(txt).eTag;
+    for (const c of conf) gfetch(`/drives/${S.g.driveId}/items/${c.id}`, {method: 'DELETE'}).catch(() => {});
+    break;
+  }
+  gCacheSave();
+}
+async function gBackup(name){
+  if (await gMeta(`backup/${name}`)) return;
+  const put = () => gfetch(`${gBase()}:/backup/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=fail`, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(S.db)});
+  let r = await put();
+  if (!r.ok && r.status !== 409){
+    await gfetch(`${gBase()}/children`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: 'backup', folder: {}, '@microsoft.graph.conflictBehavior': 'fail'})});
+    r = await put();
+  }
+}
+/* 이 기기 임시 보관(로그인 만료·연결 끊김 때 수정분 보존). 다음 연결 때 병합 */
+const gKey = () => `${S.g.driveId}/${S.g.folderId}`;
+function gCacheSave(){ if (S.mode !== 'graph') return; try { localStorage.setItem(LS_GCACHE, JSON.stringify({key: gKey(), dirty: S.dirty, db: S.db})); } catch(e){} }
+async function gConnect(f){
+  S.g = {driveId: f.driveId, folderId: f.folderId, name: f.name, etag: null, confAt: 0, polledAt: Date.now()};
+  const {remote, etag, conf} = await gPull(true);
+  let db = remote, fromCache = false;
+  const c = lsJson(LS_GCACHE);
+  if (c && c.key === gKey() && c.db){ const m = merge(db, normDb(c.db)); fromCache = JSON.stringify(m) !== JSON.stringify(db); db = m; }
+  S.db = db; S.g.etag = etag; S.mode = 'graph'; S.dir = null; S.gErr = '';
+  localStorage.setItem(LS_GF, JSON.stringify(f)); sessionStorage.removeItem(SS_SILENT);
+  setStatus('ok');
+  if (conf.length || fromCache || !etag){ S.g.confAt = 0; S.dirty = true; scheduleSave(); }
+  afterLoad();
+}
+async function gStart(input){
+  S.gBusy = true; S.gErr = ''; render();
+  try { await gConnect(await gResolve(input)); }
+  catch(e){ S.gErr = e.status === 403 ? '이 폴더에 접근할 권한이 없습니다. 편집 권한으로 공유받았는지 확인해 주세요.' : e.status === 404 ? '폴더를 찾지 못했습니다. 링크나 경로를 확인해 주세요.' : (e.message || String(e)); if (e.auth){ S.gErr = '로그인이 만료되었습니다. 다시 로그인해 주세요.'; } }
+  S.gBusy = false; if (S.mode !== 'graph') render();
+}
+
+/* ---------- connect ---------- */
+async function pickFolder(){
+  try {
+    const dir = await window.showDirectoryPicker({id:'teamplanner', mode:'readwrite'});
+    await connectDir(dir); idbSet('dir', dir);
+  } catch(e){ if (e.name !== 'AbortError') alert('폴더를 열 수 없습니다: ' + e.message); }
+}
+async function reconnect(){
+  try {
+    const dir = S.savedDir;
+    if ((await dir.requestPermission({mode:'readwrite'})) === 'granted') await connectDir(dir);
+  } catch(e){ alert('다시 연결하지 못했습니다. 폴더를 새로 선택해 주세요.\n' + e.message); }
+}
+async function connectDir(dir){
+  S.dir = dir; S.fh = await dir.getFileHandle(FILE, {create:true});
+  const {remote, lm, conf} = await pullRemote();
+  S.db = remote; S.lastLm = lm; S.mode = 'file'; setStatus('ok');
+  if (conf.length) scheduleSave();
+  afterLoad();
+}
+function localMode(){
+  try { S.db = normDb(JSON.parse(localStorage.getItem(LS_KEY) || 'null')); } catch(e){ S.db = emptyDb(); }
+  S.mode = 'local'; S.status = {kind:'local'}; afterLoad();
+}
+function afterLoad(){
+  if (!S.user || !isMember(S.user)){ render(); userModal(); return; }
+  ensurePlan(); purgeOld(); render();
+}
+function ensurePlan(){
+  if (!plans().length){ const p = create('plans', {name:'첫 번째 플랜'}); create('buckets', {planId:p.id, name:'할 일', order:0}); }
+  if (!curPlan() && S.ui.view !== 'my') S.ui.planId = plans()[0].id;
+  if (!curPlan()) S.ui.planId = plans()[0].id;
+}
+
+/* ---------- filters / groups ---------- */
+function dueKey(t){
+  if (!t.due) return 'none'; const td = today();
+  if (t.due < td) return 'late'; if (t.due === td) return 'today'; if (t.due === addDays(td,1)) return 'tomorrow';
+  const eow = endOfWeek(td); if (t.due <= eow) return 'week'; if (t.due <= addDays(eow,7)) return 'next'; return 'later';
+}
+function dueTarget(k){ const td = today(), eow = endOfWeek(td); return {today:td, tomorrow:addDays(td,1), week:eow, next:addDays(eow,7), none:''}[k]; }
+function passFilter(t){
+  const f = S.ui.filters;
+  if (!S.ui.showDone && t.done) return false;
+  if (f.text){ const q = f.text.toLowerCase(); if (!((t.title||'').toLowerCase().includes(q) || (t.notes||'').toLowerCase().includes(q))) return false; }
+  const as = (t.assignees||[]).filter(isMember), ls = (t.labels||[]).filter(isLabel);
+  if (f.assignees.length && !f.assignees.some(a => a === 'none' ? !as.length : as.includes(a))) return false;
+  if (f.labels.length && !f.labels.some(l => l === 'none' ? !ls.length : ls.includes(l))) return false;
+  if (f.due.length && !f.due.includes(dueKey(t))) return false;
+  if (f.buckets.length && !f.buckets.includes(effBucket(t))) return false;
+  return true;
+}
+const fCount = () => { const f = S.ui.filters; return f.assignees.length + f.labels.length + f.due.length + f.buckets.length; };
+/* 미완료 작업은 지정 순서대로, 완료 작업은 맨 아래에 '가장 최근 완료'가 위로 오게 */
+const doneCmp = (x,y) => (x.done ? 1 : 0) - (y.done ? 1 : 0) || (x.done && y.done ? (y.doneAt||0) - (x.doneAt||0) : 0);
+const byOrder = a => a.slice().sort((x,y) => doneCmp(x,y) || (x.order||0) - (y.order||0));
+function getGroups(pid, ts){
+  switch (S.ui.groupBy){
+    case 'assignee': return [{key:'none', title:'담당자 없음', canAdd:true, tasks: byOrder(ts.filter(t => !(t.assignees||[]).filter(isMember).length))}]
+      .concat(members().map(m => ({key:m.id, title:m.name, av:m.id, canAdd:true, tasks: byOrder(ts.filter(t => (t.assignees||[]).includes(m.id)))})));
+    case 'labels': return [{key:'none', title:'레이블 없음', canAdd:true, tasks: byOrder(ts.filter(t => !(t.labels||[]).filter(isLabel).length))}]
+      .concat(labelsOf(pid).map(l => ({key:l.id, title:l.name, lbl:l, canAdd:true, tasks: byOrder(ts.filter(t => (t.labels||[]).includes(l.id)))})));
+    case 'due': return DUE_GROUPS.map(d => ({key:d.k, title:d.t, canAdd:!d.nodrop, nodrop:d.nodrop, tasks: byOrder(ts.filter(t => dueKey(t) === d.k))}));
+    default: return buckets(pid).map(b => ({key:b.id, title:b.name, bucket:true, canAdd:true, tasks: byOrder(ts.filter(t => effBucket(t) === b.id))}));
+  }
+}
+
+/* ---------- small html helpers ---------- */
+function initials(n){ n = (n || '?').trim(); if (/^[가-힣]+$/.test(n)) return n.length >= 3 ? n.slice(-2) : n; const p = n.split(/\s+/); return ((p[0][0]||'') + (p[1]?.[0]||'')).toUpperCase(); }
+function avatar(id, cls = ''){ const n = S.db.members[id]?.name || '?'; return `<span class="av ${cls}" style="background:${AV_COLORS[hash(id) % AV_COLORS.length]}" title="${esc(n)}">${esc(initials(n))}</span>`; }
+function lchip(id, x){ const l = S.db.labels[id]; if (!l || l.deleted) return ''; const c = LABEL_COLORS[l.color] || LABEL_COLORS[0]; return `<span class="lchip" style="background:${c[1]};color:${c[2]}">${esc(l.name)}${x ? `<button class="x" data-act="lbl-remove" data-l="${l.id}" title="제거">✕</button>` : ''}</span>`; }
+function planDot(p, big){ return `<span class="pdot ${big?'big':''}" style="background:${AV_COLORS[hash(p.id) % AV_COLORS.length]}">${esc((p.name||'?').trim()[0] || '?')}</span>`; }
+function linkHref(u){ u = (u||'').trim(); if (/^(https?:|mailto:|file:)/i.test(u)) return u; if (/^([a-z]:\\|\\\\)/i.test(u)) return 'file:///' + u.replace(/\\/g,'/'); if (/^www\./i.test(u)) return 'https://' + u; return '#'; }
+
+/* ---------- render ---------- */
+function render(){
+  saveUi();
+  if (!S.mode){ renderStart(); return; }
+  if (S.drag){ S.renderPending = true; return; }
+  if (curPlan() == null && S.ui.view !== 'my' && plans().length) S.ui.planId = plans()[0].id;
+  saveScroll();
+  $('#app').innerHTML = navHtml() + `<main id="main">${mainHtml()}</main>`;
+  restoreScroll();
+  renderPanel(); refreshModal(); renderCardPop();
+  if (S.ui.addingIn){ const i = $('[data-key="newtask"]'); if (i) i.focus(); }
+  if (S.ui.addingBucket){ const i = $('[data-key="newbucket"]'); if (i) i.focus(); }
+}
+function renderContent(){ saveScroll(); const c = $('#content'); if (c) c.innerHTML = contentHtml(); restoreScroll(); renderCardPop(); }
+function saveScroll(){
+  const b = $('#board'), c = $('#content'); S.scroll = {board: b ? b.scrollLeft : 0, content: c ? c.scrollTop : 0, cols:{}};
+  $$('.col[data-g] .cards').forEach(el => S.scroll.cols[el.parentElement.dataset.g] = el.scrollTop);
+}
+function restoreScroll(){
+  const s = S.scroll; if (!s) return; const b = $('#board'), c = $('#content');
+  if (b) b.scrollLeft = s.board; if (c) c.scrollTop = s.content;
+  $$('.col[data-g] .cards').forEach(el => { const v = s.cols[el.parentElement.dataset.g]; if (v) el.scrollTop = v; });
+}
+function renderStart(){
+  const ok = 'showDirectoryPicker' in window;
+  if (msReady()){
+    const t = msTok();
+    $('#app').innerHTML = `<div class="start"><div class="start-box">
+      <h1>▦ 팀 플래너</h1>
+      ${!t ? `<p>팀 공유 폴더가 있는 OneDrive의 <b>Microsoft 계정</b>으로 로그인하세요. 휴대폰과 PC에서 같은 내용을 보고 고칠 수 있습니다.</p>
+        <button class="btn primary" data-act="ms-login">Microsoft 계정으로 로그인</button>`
+      : `<div class="acct">☁ ${esc(t.name || t.hint || 'Microsoft 계정')}<button class="linkbtn" data-act="ms-logout">로그아웃</button></div>
+        <div class="sub">팀 공유 폴더 연결 (처음 한 번)</div>
+        <div class="muted" style="line-height:1.6">OneDrive에서 공유 폴더의 <b>링크를 복사</b>해 붙여넣거나, 내 OneDrive 안의 <b>폴더 경로</b>를 입력하세요.<br>예) https://1drv.ms/f/... 또는 <code>팀플래너</code>, <code>업무/팀플래너</code></div>
+        <input class="full" id="gf-in" data-key="gf-in" placeholder="공유 링크 또는 폴더 경로" value="${esc(S.gInput || '')}" ${S.gBusy ? 'disabled' : ''}>
+        <button class="btn primary" data-act="gf-connect" ${S.gBusy ? 'disabled' : ''}>${S.gBusy ? '연결 중…' : '폴더 연결'}</button>
+        ${gFolder() && !S.gBusy ? `<button class="btn" data-act="gf-retry">‘${esc(gFolder().name)}’ 다시 연결</button>` : ''}`}
+      ${S.gErr ? `<div class="warn">${esc(S.gErr)}</div>` : ''}
+      ${ok ? `<div class="sub">이 PC에서 동기화 폴더로 쓰기</div>${S.savedDir ? `<button class="btn" data-act="reconnect">‘${esc(S.savedDir.name)}’ 폴더 다시 연결</button>` : ''}<button class="btn" data-act="pick-folder">PC의 공유 폴더 선택</button>` : ''}
+      <button class="btn" data-act="local-mode">체험 모드 (이 기기 브라우저에만 저장)</button>
+      <div class="hint">· 공유 폴더는 <b>편집 권한</b>으로 공유받아야 수정할 수 있습니다.<br>· 데이터는 OneDrive 폴더의 <code>${FILE}</code>에만 저장되고, 이 웹 주소에는 저장되지 않습니다.<br>· 다른 사람의 변경은 약 10초 안에 반영됩니다.</div>
+    </div></div>`;
+    return;
+  }
+  $('#app').innerHTML = `<div class="start"><div class="start-box">
+    <h1>▦ 팀 플래너</h1>
+    ${!ok ? `<div class="warn">휴대폰이나 이 브라우저에서는 PC 폴더 저장을 쓸 수 없습니다. 팀 플래너 <b>웹 주소</b>로 접속해 Microsoft 계정으로 로그인하세요.${MS.clientId ? '' : '<br>(관리자: Microsoft 로그인 설정 전입니다)'}</div>` : ''}
+    <p>팀이 함께 쓰는 <b>OneDrive 공유 폴더</b>를 선택하세요. 폴더 안의 <code>${FILE}</code>에 모든 플랜·작업·이력이 저장되고, 같은 폴더를 연결한 구성원끼리 내용이 합쳐집니다.</p>
+    ${ok && S.savedDir ? `<button class="btn primary" data-act="reconnect">‘${esc(S.savedDir.name)}’ 폴더 다시 연결</button>` : ''}
+    ${ok ? `<button class="btn ${S.savedDir ? '' : 'primary'}" data-act="pick-folder">공유 폴더 선택</button>` : `<div class="warn">이 브라우저는 폴더 저장 기능을 지원하지 않습니다. <b>Microsoft Edge</b> 또는 <b>Chrome</b>으로 이 파일을 열어 주세요.</div>`}
+    <button class="btn" data-act="local-mode">체험 모드 (이 PC 브라우저에만 저장)</button>
+    <div class="hint">· 처음 1회: 공유 폴더를 OneDrive와 동기화(공유 폴더 → ‘내 파일에 바로 가기 추가’)한 뒤 그 폴더를 선택합니다.<br>· 브라우저가 ‘파일 편집 허용’을 물으면 허용을 누르세요.<br>· 저장 즉시 파일에 기록되고, 다른 구성원의 변경은 OneDrive 동기화 후 몇 초 안에 반영됩니다.</div>
+  </div></div>`;
+}
+function navHtml(){
+  const pid = S.ui.view === 'my' ? null : S.ui.planId;
+  return `<nav id="nav">
+    <div class="brand">▦ 팀 플래너</div>
+    <div class="nav-item ${S.ui.view === 'my' ? 'active' : ''}" data-act="my">👤 내 작업</div>
+    <div class="nav-sec">플랜 <button class="ib" data-act="plan-add" title="새 플랜">＋</button></div>
+    <div class="plans">${plans().map(p => `<div class="nav-item ${p.id === pid ? 'active' : ''}" data-act="plan-open" data-id="${p.id}">${planDot(p)}<span style="overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span></div>`).join('')}</div>
+    <div class="nav-bottom">
+      <div class="nav-item" data-act="members">👥 구성원 관리 (${members().length})</div>
+      <div class="nav-item" data-act="activity">🕘 활동 로그</div>
+      <div class="nav-item" data-act="trash">🗑 휴지통</div>
+      <div class="nav-item" data-act="export-csv">⭳ 엑셀(CSV) 내보내기</div>
+      <div class="nav-item" data-act="export-json">⭳ 백업(JSON) 받기</div>
+      ${S.mode === 'graph' ? `<div class="nav-item" data-act="gf-change" title="다른 폴더 연결">☁ 폴더 연결 해제</div><div class="nav-item" data-act="ms-logout" title="${esc(msTok()?.hint || '')}">⎋ 로그아웃 <span class="muted">${esc(msTok()?.name || '')}</span></div>` : ''}
+      <div class="nav-item" data-act="switch-user" title="사용자 변경">${S.user && isMember(S.user) ? avatar(S.user,'sm') : ''}<span>${esc(myName())}</span><span class="muted">(변경)</span></div>
+      <div id="status" class="status ${S.mode === 'local' ? 'local' : S.status.kind}">${statusHtml()}</div>
+    </div></nav>`;
+}
+function mainHtml(){
+  if (S.ui.view === 'my'){
+    return `<header class="ph"><div class="ph-top"><button class="ib mnav" data-act="nav-toggle" title="메뉴">☰</button><span class="pdot big" style="background:#0f6cbd">👤</span><div class="ptitle" style="cursor:default">내 작업</div>
+      <div class="ph-right"><input class="search" data-inp="search" placeholder="🔍 작업 검색" value="${esc(S.ui.filters.text)}">${doneBtn()}</div></div></header>
+      <div id="content">${contentHtml()}</div>`;
+  }
+  const p = curPlan(); if (!p) return `<button class="ib mnav" data-act="nav-toggle">☰</button><div class="empty">플랜이 없습니다. 왼쪽 ‘＋’로 새 플랜을 만드세요.</div>`;
+  const v = S.ui.view, n = fCount();
+  return `<header class="ph">
+    <div class="ph-top"><button class="ib mnav" data-act="nav-toggle" title="메뉴">☰</button>${planDot(p, true)}<div class="ptitle" data-act="plan-rename" title="클릭하여 이름 변경">${esc(p.name)}</div>
+      <div class="tabs">${[['board','보드'],['grid','그리드'],['schedule','일정']].map(([k,t]) => `<div class="tab ${v === k ? 'active' : ''}" data-act="view" data-v="${k}">${t}</div>`).join('')}</div>
+      <div class="ph-right">
+        <input class="search" data-inp="search" placeholder="🔍 작업 검색" value="${esc(S.ui.filters.text)}">
+        ${doneBtn()}
+        <button class="btn ${n ? 'on' : ''}" data-act="filter">필터${n ? ` (${n})` : ''}</button>
+        ${v === 'board' ? `<span class="gb">그룹화 <select data-chg="groupby">${[['bucket','버킷'],['assignee','담당자'],['labels','레이블'],['due','마감일']].map(([k,t]) => `<option value="${k}" ${S.ui.groupBy === k ? 'selected' : ''}>${t}</option>`).join('')}</select></span>` : ''}
+        <button class="ib" data-act="plan-menu" title="플랜 메뉴">⋯</button>
+      </div></div>
+    ${S.ui.fltOpen ? filterHtml(p.id) : ''}
+  </header>
+  <div id="content" class="${v === 'board' || v === 'schedule' ? 'noscroll' : ''}">${contentHtml()}</div>`;
+}
+function doneBtn(){ return `<button class="btn ${S.ui.showDone ? '' : 'on'}" data-act="toggle-done" title="완료된 작업 표시/숨기기">${S.ui.showDone ? '✓ 완료 작업 숨기기' : '✓ 완료 작업 보이기'}</button>`; }
+function filterHtml(pid){
+  const f = S.ui.filters;
+  const opt = (k, val, label) => `<label class="fopt"><input type="checkbox" data-chg="flt" data-k="${k}" value="${val}" ${f[k].includes(val) ? 'checked' : ''}>${label}</label>`;
+  return `<div class="fpanel" data-keep>
+    <div class="fhead">필터 <button class="linkbtn" data-act="flt-clear">모두 지우기</button></div>
+    <div class="fsec"><h4>마감일</h4>${DUE_GROUPS.map(d => opt('due', d.k, d.t)).join('')}</div>
+    <div class="fsec"><h4>담당자</h4>${opt('assignees','none','담당자 없음')}${members().map(m => opt('assignees', m.id, avatar(m.id,'sm') + esc(m.name))).join('')}</div>
+    <div class="fsec"><h4>레이블</h4>${opt('labels','none','레이블 없음')}${labelsOf(pid).map(l => opt('labels', l.id, lchip(l.id))).join('')}</div>
+    <div class="fsec"><h4>버킷</h4>${buckets(pid).map(b => opt('buckets', b.id, esc(b.name))).join('')}</div>
+  </div>`;
+}
+function contentHtml(){
+  if (S.ui.view === 'my'){
+    const ts = act('tasks').filter(t => (t.assignees||[]).includes(S.user) && S.db.plans[t.planId] && !S.db.plans[t.planId].deleted).filter(passFilter);
+    return gridHtml(ts, true);
+  }
+  const p = curPlan(); if (!p) return '';
+  const ts = tasksOf(p.id).filter(passFilter);
+  if (S.ui.view === 'grid') return gridHtml(ts, false);
+  if (S.ui.view === 'schedule') return calHtml(ts);
+  return boardHtml(p.id, ts);
+}
+
+/* ---------- board ---------- */
+function boardHtml(pid, ts){
+  const groups = getGroups(pid, ts), isB = S.ui.groupBy === 'bucket';
+  return `<div class="board" id="board">${groups.map(colHtml).join('')}
+    ${isB ? `<div class="col add-col">${S.ui.addingBucket
+      ? `<div class="newtask"><input data-key="newbucket" placeholder="버킷 이름 입력 후 Enter"><div class="nt-btns"><button class="btn primary" data-act="bucket-ok">추가</button><button class="btn" data-act="bucket-cancel">취소</button></div></div>`
+      : `<div class="addb" data-act="bucket-add">＋ 새 버킷 추가</div>`}</div>` : ''}
+    ${!groups.length && !isB ? '<div class="empty">표시할 항목이 없습니다.</div>' : ''}</div>`;
+}
+function colHtml(g){
+  const title = g.av ? `${avatar(g.av,'sm')}<span class="col-t">${esc(g.title)}</span>` : g.lbl ? lchip(g.lbl.id) : `<span class="col-t" ${g.bucket ? `data-act="bucket-rename" data-id="${g.key}" title="클릭하여 이름 변경"` : ''}>${esc(g.title)}</span>`;
+  return `<section class="col" data-drop="col" data-g="${g.key}" ${g.nodrop ? 'data-nodrop="1"' : ''} ${g.bucket ? `data-bucket="${g.key}"` : ''}>
+    <div class="col-h" ${g.bucket ? `draggable="true" data-drag-bucket="${g.key}"` : ''}>${title}<span class="cnt">${g.tasks.length}</span>
+      ${g.bucket ? `<button class="ib" data-act="bucket-menu" data-id="${g.key}" title="버킷 메뉴">⋯</button>` : ''}</div>
+    ${g.canAdd ? (S.ui.addingIn === g.key
+      ? `<div class="newtask"><input data-key="newtask" data-g="${g.key}" placeholder="작업 이름 입력 후 Enter"><div class="nt-btns"><button class="btn primary" data-act="newtask-ok" data-g="${g.key}">작업 추가</button><button class="btn" data-act="newtask-cancel">취소</button></div></div>`
+      : `<button class="addt" data-act="add-task" data-g="${g.key}">＋ 작업 추가</button>`) : ''}
+    <div class="cards">${g.tasks.map(t => cardHtml(t, g.key)).join('')}</div>
+  </section>`;
+}
+function dueHtml(t){
+  if (!t.due && !t.start) return '';
+  const k = t.due && !t.done ? dueKey(t) : '';
+  const txt = t.start && t.due ? `${fmtD(t.start)} – ${fmtD(t.due)}` : t.due ? fmtD(t.due) : `${fmtD(t.start)} 시작`;
+  return `<span class="${k === 'late' ? 'late' : (k === 'today' || k === 'tomorrow') ? 'soon' : ''}">📅 ${txt}</span>`;
+}
+function chkBtn(t, cls = ''){ return `<button class="chk ${cls} ${t.done ? 'on' : ''}" data-act="card-done" data-id="${t.id}" title="${t.done ? '완료 취소' : '완료로 표시'}">✓</button>`; }
+function cardHtml(t, g){
+  const ls = (t.labels||[]).filter(isLabel), as = (t.assignees||[]).filter(isMember);
+  const cl = t.checklist || [], nc = act('comments').filter(c => c.taskId === t.id).length;
+  const meta = [dueHtml(t), cl.length ? `<span title="체크리스트">☑ ${cl.filter(i => i.done).length}/${cl.length}</span>` : '', t.notes ? '<span title="메모">≡</span>' : '', (t.links||[]).length ? `<span title="첨부·링크">🔗 ${t.links.length}</span>` : '', nc ? `<span title="댓글">💬 ${nc}</span>` : ''].join('');
+  return `<div class="card ${S.ui.openTaskId === t.id ? 'sel' : ''} ${t.done ? 'done' : ''}" draggable="true" data-drag-task="${t.id}" data-task="${t.id}" data-g="${esc(g)}" data-act="task-open" data-id="${t.id}">
+    ${ls.length ? `<div class="lbls">${ls.map(id => lchip(id)).join('')}</div>` : ''}
+    <div class="ct-row">${chkBtn(t)}<div class="ct">${esc(t.title)}</div></div>
+    ${meta ? `<div class="cmeta">${meta}</div>` : ''}
+    <div class="cfoot"><div class="avs">${as.map(id => avatar(id,'sm')).join('')}</div><span class="sp"></span>
+      <button class="addchip csm" data-act="card-asg" data-id="${t.id}">＋ 담당자</button>
+      <button class="addchip csm" data-act="card-lbl" data-id="${t.id}">＋ 레이블</button>
+      <button class="addchip csm" data-act="card-date" data-id="${t.id}">＋ 날짜</button>
+      <button class="ib" data-act="card-menu" data-id="${t.id}" title="메뉴">⋯</button></div>
+  </div>`;
+}
+
+/* ---------- grid ---------- */
+function gridHtml(ts, withPlan){
+  const {k, dir} = S.ui.sort;
+  const key = t => {
+    switch (k){
+      case 'title': return t.title || '';
+      case 'plan': return S.db.plans[t.planId]?.name || '';
+      case 'bucket': { const b = S.db.buckets[effBucket(t)]; return b ? (withPlan ? (S.db.plans[t.planId]?.name||'') + '\u0000' : '') + String(b.order).padStart(12,'0') : ''; }
+      case 'assignees': return (t.assignees||[]).filter(isMember).map(memberName).sort().join(',');
+      case 'labels': return (t.labels||[]).filter(isLabel).map(id => S.db.labels[id].name).sort().join(',');
+      case 'start': return t.start || ''; case 'due': return t.due || '';
+      case 'checklist': { const c = t.checklist||[]; return c.length ? String(c.filter(i => i.done).length / c.length) : ''; }
+      case 'updated': return String(t.updatedAt || 0).padStart(15,'0');
+      case 'done': return t.done ? '1' : '0';
+    }
+    return '';
+  };
+  const rows = ts.slice().sort((a,b) => { if (k !== 'done'){ const d = doneCmp(a,b); if (d) return d; } const x = key(a), y = key(b); if (x === y) return (a.order||0) - (b.order||0); if (!x) return 1; if (!y) return -1; return x < y ? -dir : dir; });
+  const cols = [['done','완료'], ['title','작업'], ...(withPlan ? [['plan','플랜']] : []), ['bucket','버킷'], ['assignees','담당자'], ['labels','레이블'], ['start','시작일'], ['due','마감일'], ['checklist','체크리스트'], ['updated','최종 수정']];
+  if (!rows.length) return `<div class="empty">${withPlan ? '나에게 배정된 작업이 없습니다.' : '표시할 작업이 없습니다.'}</div>`;
+  return `<div class="gridwrap"><table class="grid"><thead><tr>${cols.map(([c,t]) => `<th data-act="sort" data-k="${c}">${t}${c === k ? (dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map(t => { const cl = t.checklist||[]; return `<tr class="row" data-task="${t.id}" data-act="task-open" data-id="${t.id}">
+      <td style="width:44px">${chkBtn(t)}</td>
+      <td class="ttl ${t.done ? 'done-t' : ''}">${esc(t.title)}</td>
+      ${withPlan ? `<td>${esc(S.db.plans[t.planId]?.name)}</td>` : ''}
+      <td>${esc(S.db.buckets[effBucket(t)]?.name || '')}</td>
+      <td><div class="avs">${(t.assignees||[]).filter(isMember).map(id => avatar(id,'sm')).join('')}</div></td>
+      <td><div class="lbls" style="margin:0">${(t.labels||[]).filter(isLabel).map(id => lchip(id)).join('')}</div></td>
+      <td>${esc(t.start || '')}</td>
+      <td class="${dueKey(t) === 'late' && !t.done ? 'late' : ''}">${esc(t.due || '')}</td>
+      <td>${cl.length ? `${cl.filter(i => i.done).length}/${cl.length}` : ''}</td>
+      <td class="muted">${esc(memberName(t.updatedBy))}<br>${fmtTs(t.updatedAt)}</td></tr>`; }).join('')}
+  </tbody></table></div>`;
+}
+
+/* ---------- schedule ---------- */
+function calHtml(ts){
+  const [y, m] = S.ui.calMonth.split('-').map(Number);
+  const first = new Date(y, m-1, 1), start = addDays(ymd(first), -first.getDay()), td = today();
+  let cells = '';
+  for (let i = 0; i < 42; i++){
+    const d = addDays(start, i), items = byOrder(ts.filter(t => t.due === d));
+    cells += `<div class="cal-d ${d.slice(0,7) !== S.ui.calMonth ? 'other' : ''} ${d === td ? 'today' : ''}" data-drop="cal" data-date="${d}">
+      <span class="dn">${Number(d.slice(8))}</span><div class="cal-items">${items.map(t => `<div class="chip ${t.done ? 'done' : d < td ? 'late' : ''}" draggable="true" data-drag-task="${t.id}" data-task="${t.id}" data-act="task-open" data-id="${t.id}" title="${esc(t.title)}">${esc(t.title)}</div>`).join('')}</div></div>`;
+  }
+  const nd = byOrder(ts.filter(t => !t.due));
+  return `<div class="cal-wrap"><div class="cal">
+    <div class="cal-h"><button class="btn" data-act="cal" data-d="-1">‹</button><button class="btn" data-act="cal" data-d="0">오늘</button><button class="btn" data-act="cal" data-d="1">›</button><span class="m">${y}년 ${m}월</span><span class="muted">작업을 날짜로 끌어 놓으면 마감일이 바뀝니다.</span></div>
+    <div class="cal-dow">${['일','월','화','수','목','금','토'].map(x => `<div>${x}</div>`).join('')}</div>
+    <div class="cal-g">${cells}</div></div>
+    <div class="nodue" data-drop="cal" data-date=""><h4>마감일 없음 (${nd.length})</h4>${nd.map(t => `<div class="chip ${t.done ? 'done' : ''}" draggable="true" data-drag-task="${t.id}" data-task="${t.id}" data-act="task-open" data-id="${t.id}">${esc(t.title)}</div>`).join('')}</div>
+  </div>`;
+}
+
+/* ---------- detail panel ---------- */
+function renderPanel(){
+  const el = $('#panel'), t = S.ui.openTaskId && S.db.tasks[S.ui.openTaskId];
+  if (!S.mode || !t || t.deleted){ S.ui.openTaskId = null; el.classList.remove('open'); el.innerHTML = ''; return; }
+  const ae = document.activeElement;
+  if (el.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.type !== 'checkbox'){ S.panelPending = true; return; }
+  S.panelPending = false;
+  el.innerHTML = panelHtml(t); el.classList.add('open');
+}
+function panelHtml(t){
+  const p = S.db.plans[t.planId], bid = effBucket(t), as = (t.assignees||[]).filter(isMember), ls = (t.labels||[]).filter(isLabel);
+  const cl = t.checklist || [], cms = act('comments').filter(c => c.taskId === t.id).sort((a,b) => b.ts - a.ts);
+  return `<div class="pn-h"><div class="crumb">${esc(p?.name)} › ${esc(S.db.buckets[bid]?.name || '')}</div>
+      <button class="ib" data-act="hist" data-id="${t.id}" title="변경 이력">🕘</button>
+      <button class="ib" data-act="card-menu" data-id="${t.id}" title="메뉴">⋯</button>
+      <button class="ib" data-act="panel-close" title="닫기">✕</button></div>
+    <div class="pn-b">
+      <div class="pn-trow ${t.done ? 'done' : ''}">${chkBtn(t, 'big')}<input class="pn-title" data-chg="t-title" value="${esc(t.title)}"></div>
+      ${t.done ? `<div class="muted" style="margin:2px 0 0 30px">완료: ${esc(memberName(t.doneBy))} · ${fmtTs(t.doneAt)}</div>` : ''}
+      <div class="row"><label>담당자</label><div class="chips">
+        ${as.map(id => `<span class="achip">${avatar(id,'sm')}${esc(memberName(id))}<button class="x" data-act="asg-remove" data-m="${id}" title="제거">✕</button></span>`).join('')}
+        <button class="addchip" data-act="pop" data-p="asg">＋ 담당자</button></div>
+        ${S.ui.pop === 'asg' ? `<div class="pop" data-keep>${popHtml(t, 'asg')}</div>` : ''}
+      </div>
+      <div class="row"><label>레이블</label><div class="chips">${ls.map(id => lchip(id, true)).join('')}<button class="addchip" data-act="pop" data-p="lbl">＋ 레이블</button></div>
+        ${S.ui.pop === 'lbl' ? `<div class="pop" data-keep>${popHtml(t, 'lbl')}</div>` : ''}
+      </div>
+      <div class="grid3">
+        <div><span class="lbl">버킷</span><select data-chg="t-bucket">${buckets(t.planId).map(b => `<option value="${b.id}" ${b.id === bid ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>
+        <div><span class="lbl">시작일</span>${dateField(t, 'start')}</div>
+        <div><span class="lbl">마감일</span>${dateField(t, 'due')}</div>
+      </div>
+      <div class="row"><label>메모</label><textarea data-chg="t-notes" rows="5" placeholder="설명 입력">${esc(t.notes || '')}</textarea></div>
+      <div class="row"><label>체크리스트 ${cl.length ? `<span class="muted">${cl.filter(i => i.done).length}/${cl.length}</span>` : ''}</label>
+        ${cl.map(i => `<div class="cl-i ${i.done ? 'done' : ''}"><input type="checkbox" data-chg="cl-done" data-i="${i.id}" ${i.done ? 'checked' : ''}><input type="text" data-chg="cl-text" data-i="${i.id}" value="${esc(i.text)}"><button class="ib" data-act="cl-del" data-i="${i.id}" title="삭제">✕</button></div>`).join('')}
+        <input class="cl-add" data-key="cl-add" placeholder="＋ 항목 추가 후 Enter"></div>
+      <div class="row"><label>첨부·링크</label>
+        ${(t.links||[]).map(l => `<div class="ln-i">🔗<a href="${esc(linkHref(l.url))}" target="_blank" rel="noopener" title="${esc(l.url)}">${esc(l.name || l.url)}</a><button class="ib" data-act="link-del" data-i="${l.id}" title="삭제">✕</button></div>`).join('')}
+        <div class="linkadd"><input id="ln-url" placeholder="URL 또는 파일 경로"><input id="ln-name" placeholder="표시 이름(선택)"><button class="btn" data-act="link-add">추가</button></div></div>
+      <div class="row"><label>댓글</label><textarea id="cmt-in" rows="2" placeholder="댓글 입력 (Ctrl+Enter 게시)"></textarea>
+        <div style="text-align:right;margin-top:4px"><button class="btn primary" data-act="cmt-add">게시</button></div>
+        ${cms.map(c => `<div class="cmt"><div class="cmt-h">${avatar(c.user,'sm')}<b>${esc(c.userName || memberName(c.user))}</b>${fmtTs(c.ts)}${c.user === S.user ? `<button class="ib" style="margin-left:auto" data-act="cmt-del" data-id="${c.id}" title="삭제">✕</button>` : ''}</div><div class="cmt-b">${esc(c.text)}</div></div>`).join('')}</div>
+      <div class="pn-foot">생성: ${esc(memberName(t.createdBy))} · ${fmtTs(t.createdAt)}<br>최종 수정: ${esc(memberName(t.updatedBy))} · ${fmtTs(t.updatedAt)}<br><button class="linkbtn" data-act="hist" data-id="${t.id}">변경 이력 보기</button>
+        <div class="pn-del"><button class="btn danger" data-act="panel-del" data-id="${t.id}">🗑 작업 삭제</button></div></div>
+    </div>`;
+}
+/* 날짜 입력칸: 직접 입력(텍스트) + 📅 달력 선택(숨긴 date 입력의 달력 호출) */
+function dateField(t, f){
+  const v = esc(t[f] || '');
+  return `<span class="dfield"><input type="text" class="dtext" data-chg="t-${f}" data-t="${t.id}" value="${v}" placeholder="예: 11/20" autocomplete="off" title="직접 입력 예: 2026-11-20, 2026.11.20, 11/20, 1120"><button type="button" class="dpick" data-act="dpick" title="달력에서 선택">📅</button><input type="date" class="dhid" data-chg="t-${f}" data-t="${t.id}" value="${v}" tabindex="-1" aria-hidden="true"></span>`;
+}
+/* 직접 입력한 날짜 해석. 빈 값 → '', 해석 불가 → null */
+function parseDateInput(s){
+  s = String(s || '').trim(); if (!s) return '';
+  s = s.replace(/\s*(년|월)\s*/g, '-').replace(/\s*일\s*$/, '').replace(/[./\s]+/g, '-').replace(/-+$/, '');
+  const yr = new Date().getFullYear(); let y, m, d, r;
+  if ((r = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) [y, m, d] = [r[1], r[2], r[3]];
+  else if ((r = s.match(/^(\d{2})-(\d{1,2})-(\d{1,2})$/))) [y, m, d] = ['20' + r[1], r[2], r[3]];
+  else if ((r = s.match(/^(\d{4})(\d{2})(\d{2})$/))) [y, m, d] = [r[1], r[2], r[3]];
+  else if ((r = s.match(/^(\d{2})(\d{2})(\d{2})$/))) [y, m, d] = ['20' + r[1], r[2], r[3]];
+  else if ((r = s.match(/^(\d{1,2})-(\d{1,2})$/))) [y, m, d] = [yr, r[1], r[2]];
+  else if ((r = s.match(/^(\d{2})(\d{2})$/))) [y, m, d] = [yr, r[1], r[2]];
+  else return null;
+  y = Number(y); m = Number(m); d = Number(d);
+  const dt = new Date(y, m - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
+  return ymd(dt);
+}
+function setDate(el, f){
+  const id = el.dataset.t || S.ui.openTaskId, v = parseDateInput(el.value);
+  if (v === null){ el.classList.add('bad'); el.title = '날짜를 인식하지 못했습니다. 예: 2026-11-20, 11/20, 1120'; return; }
+  el.classList.remove('bad');
+  const box = el.closest('.dfield'); if (box) box.querySelectorAll('input').forEach(i => i.value = v);
+  updateTask(id, f, v);
+}
+/* 담당자·레이블 선택 창 (상세 패널과 카드에서 같은 모양으로 사용) */
+function popHtml(t, type){
+  if (type === 'date'){
+    return `<div class="popdate"><div class="pdl">시작일${dateField(t, 'start')}</div>
+      <div class="pdl">마감일${dateField(t, 'due')}</div></div>
+      <div class="muted" style="margin-top:6px">직접 입력 예: 2026-11-20, 11/20, 1120 · 📅로 달력 선택</div>
+      ${t.start && t.due && t.start > t.due ? '<div class="warn" style="margin-top:6px;padding:6px 8px">시작일이 마감일보다 늦습니다.</div>' : ''}
+      <div style="text-align:right;margin-top:6px"><button class="linkbtn" data-act="date-clear" data-t="${t.id}">날짜 지우기</button></div>`;
+  }
+  if (type === 'asg'){
+    const as = (t.assignees||[]).filter(isMember);
+    return members().map(m => `<label class="popi"><input type="checkbox" data-chg="asg" data-t="${t.id}" data-m="${m.id}" ${as.includes(m.id) ? 'checked' : ''}>${avatar(m.id,'sm')}${esc(m.name)}</label>`).join('') || '<div class="muted">구성원이 없습니다.</div>';
+  }
+  const ls = (t.labels||[]).filter(isLabel), n = labelsOf(t.planId).length;
+  return `${labelsOf(t.planId).map(l => `<label class="popi"><input type="checkbox" data-chg="lbl" data-t="${t.id}" data-l="${l.id}" ${ls.includes(l.id) ? 'checked' : ''}>${lchip(l.id)}</label>`).join('') || '<div class="muted" style="padding:4px 6px">아직 레이블이 없습니다.</div>'}
+    <div class="popnew"><input class="nl-name" data-key="lbl-new" data-t="${t.id}" placeholder="새 레이블 이름"><select class="nl-color">${LABEL_COLORS.map((c,i) => `<option value="${i}" ${i === n % 25 ? 'selected' : ''}>${c[0]}</option>`).join('')}</select><button class="btn" data-act="lbl-new" data-t="${t.id}">추가</button></div>`;
+}
+/* 카드에서 연 선택 창: 화면에 떠 있는 창(#cpop)을 누른 버튼 아래에 붙여 표시 */
+function renderCardPop(){
+  const el = $('#cpop'), cp = S.ui.cardPop, t = cp && S.db.tasks[cp.id];
+  const btn = t && !t.deleted && $(`.card[data-id="${cp.id}"] [data-act="card-${cp.type}"]`);
+  if (!btn){ S.ui.cardPop = null; el.style.display = 'none'; el.innerHTML = ''; return; }
+  const ae = document.activeElement;
+  if (!(el.contains(ae) && ae.tagName === 'INPUT' && ae.type !== 'checkbox')) el.innerHTML = popHtml(t, cp.type);
+  el.style.display = 'block'; placeCardPop();
+}
+function placeCardPop(){
+  const el = $('#cpop'), cp = S.ui.cardPop; if (!cp) return;
+  const btn = $(`.card[data-id="${cp.id}"] [data-act="card-${cp.type}"]`); if (!btn){ el.style.display = 'none'; return; }
+  const r = btn.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+  el.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+  el.style.top = (r.bottom + 4 + h > innerHeight - 8 ? Math.max(8, r.top - h - 4) : r.bottom + 4) + 'px';
+}
+function toggleCardPop(id, type){
+  const cp = S.ui.cardPop;
+  S.ui.cardPop = cp && cp.id === id && cp.type === type ? null : {id, type};
+  renderCardPop();
+}
+function closeCardPop(){ if (!S.ui.cardPop) return; S.ui.cardPop = null; renderCardPop(); }
+function openTask(id){ S.ui.openTaskId = id; S.ui.pop = null; render(); }
+
+/* ---------- modals ---------- */
+function openModal(fn, o = {}){ S.modal = {fn, locked: !!o.locked, wide: !!o.wide}; refreshModal(true); }
+function closeModal(){ if (S.modal?.locked) return; S.modal = null; $('#modal').className = ''; $('#modal').innerHTML = ''; }
+function refreshModal(force){
+  const el = $('#modal'); if (!S.modal) return;
+  const ae = document.activeElement;
+  if (!force && el.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
+  const {title, body} = S.modal.fn();
+  const mb = el.querySelector('.mb'), st = mb ? mb.scrollTop : 0;
+  el.innerHTML = `<div class="mbox ${S.modal.wide ? 'wide' : ''}"><div class="mh">${title}${S.modal.locked ? '' : '<button class="ib" data-act="modal-close">✕</button>'}</div><div class="mb">${body}</div></div>`;
+  el.className = 'open'; const nb = el.querySelector('.mb'); if (nb) nb.scrollTop = st;
+}
+const TAGC = {'생성':'c','수정':'m','이동':'m','삭제':'d','복원':'r','댓글':'k','완료':'c'};
+function histTable(hs, withTask){
+  if (!hs.length) return '<div class="empty">기록이 없습니다.</div>';
+  return `<table class="hist"><thead><tr><th>일시</th><th>수정자</th>${withTask ? '<th>작업</th>' : ''}<th>구분</th><th>항목</th><th>이전 값</th><th>변경 값</th></tr></thead><tbody>
+    ${hs.map(h => `<tr><td style="white-space:nowrap">${fmtTs(h.ts)}</td><td style="white-space:nowrap">${esc(h.userName || memberName(h.user))}</td>
+      ${withTask ? `<td>${esc(S.db.tasks[h.taskId]?.title || '')}</td>` : ''}
+      <td><span class="tag ${TAGC[h.action] || ''}">${esc(h.action)}</span></td><td>${esc(h.field)}</td>
+      <td class="from">${esc(h.from)}</td><td class="to">${esc(h.to)}</td></tr>`).join('')}</tbody></table>`;
+}
+function historyModal(id, back){
+  openModal(() => { const t = S.db.tasks[id];
+    return {title: `${back === 'trash' ? '<button class="btn" style="margin-right:10px" data-act="trash">← 휴지통</button>' : ''}변경 이력 — ${esc(t?.title || '')}${t?.deleted ? ' <span class="tag d" style="margin-left:6px">삭제됨</span>' : ''}`,
+      body: histTable(act('history').filter(h => h.taskId === id).sort((a,b) => b.ts - a.ts), false)}; }, {wide:true});
+}
+function activityModal(){
+  openModal(() => {
+    const pid = S.ui.view === 'my' ? null : S.ui.planId;
+    const hs = act('history').filter(h => !pid || h.planId === pid || S.db.tasks[h.taskId]?.planId === pid).sort((a,b) => b.ts - a.ts).slice(0, 500);
+    return {title: `활동 로그 — ${pid ? esc(S.db.plans[pid]?.name) : '전체'} <span class="muted" style="margin-left:8px;font-weight:400">최근 500건</span>`, body: histTable(hs, true)};
+  }, {wide:true});
+}
+const KEEP_MS = 183 * 86400000;   // 휴지통 보관기간 6개월
+const keepUntil = ts => ts ? ymd(new Date(ts + KEEP_MS)) : '-';
+function trashModal(){
+  openModal(() => {
+    const live = x => !x.purged && x.deleted;
+    const planOk = pid => S.db.plans[pid] && !S.db.plans[pid].deleted;
+    const byDel = (a,b) => (b.deletedAt||0) - (a.deletedAt||0);
+    const dp = Object.values(S.db.plans).filter(live).sort(byDel);
+    const db = Object.values(S.db.buckets).filter(b => live(b) && planOk(b.planId)).sort(byDel);
+    const dt = Object.values(S.db.tasks).filter(t => live(t) && planOk(t.planId)).sort(byDel);
+    const meta = x => `<span class="muted">${esc(memberName(x.deletedBy))} · ${fmtTs(x.deletedAt)} · 보관 ~${keepUntil(x.deletedAt)}</span>`;
+    const body = `<div class="muted" style="margin-bottom:10px">삭제한 항목은 6개월간 보관된 뒤 자동으로 영구 삭제됩니다. 작업을 누르면 변경 이력을 볼 수 있습니다.</div>
+      ${dp.length ? `<div class="lbl">삭제된 플랜</div>${dp.map(p => `<div class="mrow"><span style="flex:1">${esc(p.name)} ${meta(p)}</span><button class="btn" data-act="restore-plan" data-id="${p.id}">복원</button></div>`).join('')}<br>` : ''}
+      ${db.length ? `<div class="lbl">삭제된 버킷</div>${db.map(b => { const n = dt.filter(t => t.delByBucket === b.id).length;
+        return `<div class="mrow"><span style="flex:1">🗂 ${esc(b.name)} <span class="muted">[${esc(S.db.plans[b.planId]?.name)}] 작업 ${n}개</span> ${meta(b)}</span><button class="btn" data-act="restore-bucket" data-id="${b.id}">버킷·작업 복원</button></div>`; }).join('')}<br>` : ''}
+      <div class="lbl">삭제된 작업</div>${dt.length ? dt.map(t => { const bb = t.delByBucket && S.db.buckets[t.delByBucket];
+        return `<div class="mrow"><span class="trash-i" data-act="hist" data-id="${t.id}" data-back="trash" title="변경 이력 보기">${esc(t.title)} <span class="muted">[${esc(S.db.plans[t.planId]?.name)}${bb ? ` · 버킷 ‘${esc(bb.name)}’과 함께 삭제` : ''}]</span> ${meta(t)}</span><button class="btn" data-act="restore-task" data-id="${t.id}">복원</button></div>`; }).join('') : '<div class="muted">없음</div>'}`;
+    return {title:'휴지통', body};
+  }, {wide:true});
+}
+function membersModal(){
+  openModal(() => ({title:`구성원 관리 <span class="muted" style="margin-left:8px;font-weight:400">${members().length}명</span>`, body: `
+    ${members().map(m => `<div class="mrow">${avatar(m.id)}<input type="text" data-chg="mem-name" data-id="${m.id}" value="${esc(m.name)}">${m.id === S.user ? '<span class="muted">나</span>' : `<button class="btn danger" data-act="mem-del" data-id="${m.id}">삭제</button>`}</div>`).join('')}
+    <div class="mrow" style="margin-top:10px"><input type="text" id="mem-new" data-key="mem-add" placeholder="새 구성원 이름"><button class="btn primary" data-act="mem-add">추가</button></div>
+    <div class="muted" style="margin-top:8px">구성원은 모든 플랜에서 담당자로 지정할 수 있습니다. 삭제해도 기존 이력의 이름은 남습니다.</div>`}));
+}
+function labelsModal(pid){
+  openModal(() => ({title:`레이블 관리 — ${esc(S.db.plans[pid]?.name)}`, body: `
+    ${labelsOf(pid).map(l => `<div class="mrow">${lchip(l.id)}<input type="text" data-chg="lbl-name" data-id="${l.id}" value="${esc(l.name)}"><select data-chg="lbl-color" data-id="${l.id}">${LABEL_COLORS.map((c,i) => `<option value="${i}" ${i === l.color ? 'selected' : ''}>${c[0]}</option>`).join('')}</select><button class="btn danger" data-act="lbl-del" data-id="${l.id}">삭제</button></div>`).join('') || '<div class="muted">레이블이 없습니다.</div>'}
+    <div class="mrow" style="margin-top:10px"><input type="text" id="lm-name" data-key="lm-add" placeholder="새 레이블 이름"><select id="lm-color">${LABEL_COLORS.map((c,i) => `<option value="${i}" ${i === labelsOf(pid).length % 25 ? 'selected' : ''}>${c[0]}</option>`).join('')}</select><button class="btn primary" data-act="lm-add">추가</button></div>`}));
+}
+function userModal(){
+  openModal(() => ({title:'사용자 선택', body: `<p style="margin-top:0">이 PC에서 사용할 이름을 선택하세요. 변경 이력에 이 이름이 기록됩니다.</p>
+    ${members().map(m => `<div class="mrow"><button class="btn" style="flex:1;text-align:left;display:flex;align-items:center;gap:8px" data-act="pick-user" data-id="${m.id}">${avatar(m.id)}${esc(m.name)}</button></div>`).join('')}
+    <div class="mrow" style="margin-top:10px"><input type="text" id="user-new" data-key="user-new" placeholder="목록에 없으면 이름 입력"><button class="btn primary" data-act="user-new">추가하고 시작</button></div>`}), {locked: !S.user || !isMember(S.user)});
+}
+
+/* ---------- context menu ---------- */
+function showMenu(x, y, items){
+  const m = $('#ctx'); S.menuItems = items;
+  m.innerHTML = items.map((it, i) => it.sep ? '<div class="sep"></div>' : `<div class="mi ${it.danger ? 'danger' : ''}" data-mi="${i}">${it.label}</div>`).join('');
+  m.style.display = 'block';
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px'; m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+}
+const hideMenu = () => { $('#ctx').style.display = 'none'; };
+function taskMenu(id, x, y){
+  showMenu(x, y, [
+    {label:'📝 열기', fn:() => openTask(id)},
+    {label:'🕘 변경 이력', fn:() => historyModal(id)},
+    {label:'⧉ 복제', fn:() => dupTask(id)},
+    {sep:true},
+    {label:'🗂 다른 버킷으로 이동', fn:() => moveModal(id)},
+    {label:'⬆ 위로 한 칸', fn:() => nudgeTask(id, -1)},
+    {label:'⬇ 아래로 한 칸', fn:() => nudgeTask(id, 1)},
+    {sep:true},
+    {label:'🗑 삭제', danger:true, fn:() => delTask(id)}
+  ]);
+}
+
+/* ---------- task operations ---------- */
+function newTask(g, title){
+  title = (title || '').trim(); if (!title) return;
+  const pid = S.ui.planId, gb = S.ui.groupBy;
+  let bId = gb === 'bucket' ? g : buckets(pid)[0]?.id;
+  if (!bId) bId = create('buckets', {planId:pid, name:'할 일', order:0}).id;
+  const minO = Math.min(0, ...tasksOf(pid).map(t => t.order || 0));
+  const t = create('tasks', {planId:pid, bucketId:bId, title,
+    assignees: gb === 'assignee' && g !== 'none' ? [g] : [], labels: gb === 'labels' && g !== 'none' ? [g] : [],
+    start:'', due: gb === 'due' ? dueTarget(g) : '', notes:'', checklist:[], links:[], order: minO - 1, updatedBy:S.user, updatedAt:Date.now()});
+  logH(t.id, '생성', '작업', '', title);
+}
+function dupTask(id){
+  const s = S.db.tasks[id]; if (!s) return;
+  const t = create('tasks', {planId:s.planId, bucketId:effBucket(s), title: s.title + ' (복사본)', assignees:[...(s.assignees||[])], labels:[...(s.labels||[])], start:s.start||'', due:s.due||'', notes:s.notes||'', checklist:(s.checklist||[]).map(i => ({...i, id:uid()})), links:(s.links||[]).map(l => ({...l, id:uid()})), order:(s.order||0) + 0.001, updatedBy:S.user, updatedAt:Date.now()});
+  logH(t.id, '생성', '작업', '', `${t.title} (‘${s.title}’에서 복제)`);
+  render();
+}
+function delTask(id){
+  const t = S.db.tasks[id]; if (!t || !confirm(`‘${t.title}’ 작업을 삭제할까요?\n휴지통에서 복원할 수 있습니다.`)) return;
+  softDelTask(id, ''); if (S.ui.openTaskId === id) S.ui.openTaskId = null; render();
+}
+function softDelTask(id, note, byBucket){
+  setF('tasks', id, 'deleted', true); setF('tasks', id, 'deletedBy', S.user); setF('tasks', id, 'deletedAt', Date.now()); setF('tasks', id, 'delByBucket', byBucket || ''); touch(id);
+  logH(id, '삭제', '작업', S.db.tasks[id].title, note);
+}
+function undelTask(id, note){
+  setF('tasks', id, 'deleted', false); setF('tasks', id, 'delByBucket', ''); touch(id);
+  logH(id, '복원', '작업', '', note || S.db.tasks[id].title);
+}
+function restoreTask(id){
+  const t = S.db.tasks[id]; if (!t) return;
+  const b = S.db.buckets[t.bucketId];
+  if (b && b.deleted && !b.purged && b.planId === t.planId){ restoreBucketOnly(b.id); }   // 버킷이 삭제돼 있으면 버킷도 함께 복원
+  undelTask(id);
+  if (!effBucket(t)) setF('tasks', id, 'bucketId', create('buckets', {planId:t.planId, name:'할 일', order:0}).id);
+  else if (effBucket(t) !== t.bucketId) setF('tasks', id, 'bucketId', effBucket(t));
+  render();
+}
+function restoreBucketOnly(bid){ setF('buckets', bid, 'deleted', false); }
+function restoreBucket(bid){
+  const b = S.db.buckets[bid]; if (!b) return;
+  restoreBucketOnly(bid);
+  Object.values(S.db.tasks).filter(t => t.deleted && !t.purged && t.delByBucket === bid).forEach(t => undelTask(t.id, `${t.title} (버킷 ‘${b.name}’ 복원)`));
+  render();
+}
+function toggleDone(id){
+  const t = S.db.tasks[id]; if (!t) return; const v = !t.done;
+  setF('tasks', id, 'done', v); setF('tasks', id, 'doneAt', v ? Date.now() : 0); setF('tasks', id, 'doneBy', v ? S.user : ''); touch(id);
+  logH(id, '완료', '완료 여부', v ? '미완료' : '완료', v ? '완료' : '미완료'); render();
+}
+/* 휴지통 6개월 경과분 영구 삭제: 내용을 지우고 'purged' 표식만 남김(다른 PC 사본과 병합돼도 되살아나지 않음) */
+function purgeOld(){
+  const lim = Date.now() - KEEP_MS, old = x => !x.purged && x.deleted && x.deletedAt && x.deletedAt < lim;
+  let n = 0; const stub = (c, id) => { const t = now(); S.db[c][id] = {id, purged:true, deleted:true, _v:{purged:t, deleted:t}}; n++; };
+  const deadPlans = new Set(Object.values(S.db.plans).filter(old).map(p => p.id));
+  Object.values(S.db.buckets).forEach(b => { if (!b.purged && (old(b) || deadPlans.has(b.planId))) stub('buckets', b.id); });
+  const deadTasks = new Set();
+  Object.values(S.db.tasks).forEach(t => { if (!t.purged && (old(t) || deadPlans.has(t.planId))){ deadTasks.add(t.id); stub('tasks', t.id); } });
+  Object.values(S.db.labels).forEach(l => { if (!l.purged && (old(l) || deadPlans.has(l.planId))) stub('labels', l.id); });
+  Object.values(S.db.history).forEach(h => { if (!h.purged && deadTasks.has(h.taskId)) stub('history', h.id); });
+  Object.values(S.db.comments).forEach(c => { if (!c.purged && (old(c) || deadTasks.has(c.taskId))) stub('comments', c.id); });
+  deadPlans.forEach(id => stub('plans', id));
+  if (n) markDirty();
+}
+function orderBetween(list, beforeId){
+  if (!list.length) return 0;
+  if (!beforeId) return (list[list.length-1].order || 0) + 1;
+  const i = list.findIndex(t => t.id === beforeId); if (i < 0) return (list[list.length-1].order || 0) + 1;
+  const next = list[i].order || 0; if (i === 0) return next - 1;
+  return ((list[i-1].order || 0) + next) / 2;
+}
+/* 드래그 대신 쓰는 이동(휴대폰용): 다른 버킷의 맨 위로 / 같은 버킷 안에서 한 칸씩 */
+function moveModal(id){
+  openModal(() => { const t = S.db.tasks[id]; if (!t) return {title:'이동', body:''}; const cur = effBucket(t);
+    return {title:`다른 버킷으로 이동 — ${esc(t.title)}`, body: buckets(t.planId).map(b => `<div class="mrow"><button class="btn ${b.id === cur ? 'on' : ''}" style="flex:1;text-align:left;padding:9px 12px" data-act="move-to" data-id="${id}" data-b="${b.id}">🗂 ${esc(b.name)}${b.id === cur ? ' <span class="muted">(현재)</span>' : ''}</button></div>`).join('')}; });
+}
+function moveToBucket(id, bid){
+  const t = S.db.tasks[id]; if (!t) return;
+  if (effBucket(t) !== bid){
+    const os = tasksOf(t.planId).filter(x => x.id !== id && effBucket(x) === bid).map(x => x.order || 0);
+    updateTask(id, 'order', os.length ? Math.min(...os) - 1 : 0, {noLog:true, noRender:true});
+    updateTask(id, 'bucketId', bid, {noRender:true});
+  }
+  closeModal(); render();
+}
+function nudgeTask(id, d){
+  const t = S.db.tasks[id]; if (!t) return;
+  const list = byOrder(tasksOf(t.planId).filter(x => effBucket(x) === effBucket(t) && !!x.done === !!t.done && passFilter(x)));
+  const i = list.findIndex(x => x.id === id), j = i + d; if (i < 0 || j < 0 || j >= list.length) return;
+  const a = list[j].order || 0, b = list[j + d] ? (list[j + d].order || 0) : a + d;
+  updateTask(id, 'order', a === b ? a + d * 0.5 : (a + b) / 2, {noLog:true});
+}
+function dropTask(id, from, to, beforeId){
+  const t = S.db.tasks[id]; if (!t) return;
+  const gb = S.ui.groupBy, ts = tasksOf(S.ui.planId).filter(passFilter);
+  const grp = getGroups(S.ui.planId, ts).find(g => g.key === to); if (!grp || grp.nodrop) return;
+  const list = grp.tasks.filter(x => x.id !== id);
+  updateTask(id, 'order', orderBetween(list, beforeId), {noLog:true, noRender:true});
+  if (gb === 'bucket') updateTask(id, 'bucketId', to, {noRender:true});
+  else if (gb === 'assignee' || gb === 'labels'){
+    const f = gb === 'assignee' ? 'assignees' : 'labels'; let arr = [...(t[f] || [])];
+    if (from !== to){ if (from !== 'none') arr = arr.filter(x => x !== from); if (to !== 'none' && !arr.includes(to)) arr.push(to); if (to === 'none' && from === 'none') arr = []; }
+    updateTask(id, f, arr, {noRender:true});
+  } else if (gb === 'due' && from !== to) updateTask(id, 'due', dueTarget(to), {noRender:true});
+  render();
+}
+
+/* ---------- export ---------- */
+function download(name, text, type){ const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
+function exportCsv(){
+  const q = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
+  const rows = [['플랜','버킷','완료','작업','담당자','레이블','시작일','마감일','체크리스트','메모','링크','생성자','생성일시','최종수정자','최종수정일시']];
+  const pids = S.ui.view === 'my' ? plans().map(p => p.id) : [S.ui.planId];
+  for (const pid of pids) for (const t of byOrder(tasksOf(pid))){
+    const cl = t.checklist || [];
+    rows.push([S.db.plans[pid]?.name, S.db.buckets[effBucket(t)]?.name, t.done ? '완료' : '', t.title, fmtVal('assignees', (t.assignees||[]).filter(isMember)), fmtVal('labels', (t.labels||[]).filter(isLabel)), t.start, t.due,
+      cl.length ? `${cl.filter(i => i.done).length}/${cl.length}` : '', t.notes, (t.links||[]).map(l => l.url).join(' | '), memberName(t.createdBy), fmtTs(t.createdAt), memberName(t.updatedBy), fmtTs(t.updatedAt)]);
+  }
+  download(`플래너_${S.ui.view === 'my' ? '전체' : (curPlan()?.name || '')}_${today().replace(/-/g,'')}.csv`, '﻿' + rows.map(r => r.map(q).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
+}
+
+/* ---------- events: click ---------- */
+const ACT = {
+  'pick-folder': () => pickFolder(),
+  'reconnect': () => reconnect(),
+  'local-mode': () => localMode(),
+  'ms-login': () => msLogin(false),
+  'ms-relogin': () => msLogin(false),
+  'ms-logout': () => msLogout(),
+  'gf-connect': () => { const v = $('#gf-in')?.value || ''; S.gInput = v; if (v.trim()) gStart(v); },
+  'gf-retry': async () => { S.gBusy = true; S.gErr = ''; render(); try { await gConnect(gFolder()); } catch(e){ S.gErr = e.message || String(e); } S.gBusy = false; if (S.mode !== 'graph') render(); },
+  'gf-change': () => { if (S.dirty && !confirm('아직 저장되지 않은 변경이 있습니다. 그래도 연결을 해제할까요?')) return; localStorage.removeItem(LS_GF); localStorage.removeItem(LS_GCACHE); S.mode = null; S.g = {}; S.db = emptyDb(); render(); },
+  'nav-toggle': () => document.body.classList.toggle('navopen'),
+  'task-move': el => moveModal(el.dataset.id),
+  'move-to': el => moveToBucket(el.dataset.id, el.dataset.b),
+  'my': () => { S.ui.view = 'my'; S.ui.fltOpen = false; render(); },
+  'plan-open': el => { S.ui.planId = el.dataset.id; if (S.ui.view === 'my') S.ui.view = 'board'; Object.assign(S.ui.filters, {labels:[], buckets:[]}); S.ui.fltOpen = false; S.ui.openTaskId = null; render(); },
+  'plan-add': () => { const n = prompt('새 플랜 이름'); if (!n || !n.trim()) return; const p = create('plans', {name:n.trim()}); create('buckets', {planId:p.id, name:'할 일', order:0}); S.ui.planId = p.id; S.ui.view = 'board'; render(); },
+  'plan-rename': () => { const p = curPlan(); const n = prompt('플랜 이름', p.name); if (n && n.trim() && n !== p.name){ setF('plans', p.id, 'name', n.trim()); render(); } },
+  'plan-menu': (el, e) => { const p = curPlan(); const r = el.getBoundingClientRect(); showMenu(r.left - 140, r.bottom + 4, [
+      {label:'✏ 이름 바꾸기', fn: ACT['plan-rename']}, {label:'🏷 레이블 관리', fn:() => labelsModal(p.id)},
+      {sep:true}, {label:'🗑 플랜 삭제', danger:true, fn:() => { if (!confirm(`‘${p.name}’ 플랜을 삭제할까요?\n휴지통에서 복원할 수 있습니다.`)) return; setF('plans', p.id, 'deleted', true); setF('plans', p.id, 'deletedBy', S.user); setF('plans', p.id, 'deletedAt', Date.now()); S.ui.openTaskId = null; S.ui.planId = plans()[0]?.id || null; ensurePlan(); render(); }}]); },
+  'view': el => { S.ui.view = el.dataset.v; render(); },
+  'filter': () => { S.ui.fltOpen = !S.ui.fltOpen; render(); },
+  'flt-clear': () => { Object.assign(S.ui.filters, {assignees:[], labels:[], due:[], buckets:[]}); render(); },
+  'sort': el => { const k = el.dataset.k; S.ui.sort = S.ui.sort.k === k ? {k, dir: -S.ui.sort.dir} : {k, dir:1}; renderContent(); saveUi(); },
+  'cal': el => { const d = Number(el.dataset.d); if (!d) S.ui.calMonth = today().slice(0,7); else { const [y,m] = S.ui.calMonth.split('-').map(Number); const nd = new Date(y, m-1+d, 1); S.ui.calMonth = `${nd.getFullYear()}-${pad(nd.getMonth()+1)}`; } renderContent(); saveUi(); },
+  'task-open': el => openTask(el.dataset.id),
+  'card-menu': (el, e) => { const r = el.getBoundingClientRect(); taskMenu(el.dataset.id, r.left, r.bottom + 2); },
+  'add-task': el => { S.ui.addingIn = el.dataset.g; render(); },
+  'newtask-ok': el => { const i = $('[data-key="newtask"]'); newTask(el.dataset.g, i?.value); S.ui.addingIn = el.dataset.g; render(); },
+  'newtask-cancel': () => { S.ui.addingIn = null; render(); },
+  'bucket-add': () => { S.ui.addingBucket = true; render(); },
+  'bucket-ok': () => addBucket($('[data-key="newbucket"]')?.value),
+  'bucket-cancel': () => { S.ui.addingBucket = false; render(); },
+  'bucket-rename': el => { const b = S.db.buckets[el.dataset.id]; const n = prompt('버킷 이름', b.name); if (n && n.trim() && n !== b.name){ setF('buckets', b.id, 'name', n.trim()); render(); } },
+  'bucket-menu': el => { const id = el.dataset.id, r = el.getBoundingClientRect(); showMenu(r.left, r.bottom + 2, [
+      {label:'✏ 이름 바꾸기', fn:() => ACT['bucket-rename']({dataset:{id}})},
+      {sep:true}, {label:'🗑 버킷 삭제', danger:true, fn:() => delBucket(id)}]); },
+  'panel-close': () => { S.ui.openTaskId = null; S.ui.pop = null; render(); },
+  'hist': el => historyModal(el.dataset.id, el.dataset.back),
+  'toggle-done': () => { S.ui.showDone = !S.ui.showDone; render(); },
+  'card-done': el => toggleDone(el.dataset.id),
+  'card-asg': el => toggleCardPop(el.dataset.id, 'asg'),
+  'card-lbl': el => toggleCardPop(el.dataset.id, 'lbl'),
+  'card-date': el => toggleCardPop(el.dataset.id, 'date'),
+  'dpick': el => { const h = el.parentElement.querySelector('.dhid'); try { h.showPicker(); } catch(e){ h.focus(); h.click(); } },
+  'date-clear': el => { const id = el.dataset.t; updateTask(id, 'start', '', {noRender:true}); updateTask(id, 'due', '', {noRender:true}); render(); },
+  'panel-del': el => delTask(el.dataset.id),
+  'restore-bucket': el => { restoreBucket(el.dataset.id); refreshModal(true); },
+  'pop': el => { S.ui.pop = S.ui.pop === el.dataset.p ? null : el.dataset.p; renderPanel(); },
+  'asg-remove': el => { const t = S.db.tasks[S.ui.openTaskId]; updateTask(t.id, 'assignees', (t.assignees||[]).filter(x => x !== el.dataset.m)); },
+  'lbl-remove': el => { const t = S.db.tasks[S.ui.openTaskId]; if (!t) return; updateTask(t.id, 'labels', (t.labels||[]).filter(x => x !== el.dataset.l)); },
+  'lbl-new': el => { const box = el.closest('.pop'), t = S.db.tasks[el.dataset.t || S.ui.openTaskId], inp = box.querySelector('.nl-name'), n = inp.value.trim(); if (!t || !n) return;
+    const l = create('labels', {planId:t.planId, name:n, color:Number(box.querySelector('.nl-color').value)}); inp.value = ''; inp.blur(); updateTask(t.id, 'labels', [...(t.labels||[]), l.id]); },
+  'cl-del': el => { const t = S.db.tasks[S.ui.openTaskId], it = (t.checklist||[]).find(i => i.id === el.dataset.i); updateTask(t.id, 'checklist', t.checklist.filter(i => i.id !== el.dataset.i), {noLog:true, noRender:true}); logH(t.id, '수정', '체크리스트', it?.text, '(항목 삭제)'); render(); },
+  'link-add': () => { const t = S.db.tasks[S.ui.openTaskId], u = $('#ln-url').value.trim(), n = $('#ln-name').value.trim(); if (!u) return; updateTask(t.id, 'links', [...(t.links||[]), {id:uid(), url:u, name:n}], {noLog:true, noRender:true}); logH(t.id, '수정', '첨부·링크', '', `추가: ${n || u}`); render(); },
+  'link-del': el => { const t = S.db.tasks[S.ui.openTaskId], l = t.links.find(x => x.id === el.dataset.i); updateTask(t.id, 'links', t.links.filter(x => x.id !== el.dataset.i), {noLog:true, noRender:true}); logH(t.id, '수정', '첨부·링크', l?.name || l?.url, '(삭제)'); render(); },
+  'cmt-add': () => { const t = S.db.tasks[S.ui.openTaskId], v = $('#cmt-in').value.trim(); if (!v) return; create('comments', {taskId:t.id, ts:Date.now(), user:S.user, userName:myName(), text:v}); logH(t.id, '댓글', '댓글', '', v.length > 200 ? v.slice(0,200) + '…' : v); $('#cmt-in').value = ''; $('#cmt-in').blur(); render(); },
+  'cmt-del': el => { const c = S.db.comments[el.dataset.id]; if (!confirm('댓글을 삭제할까요?')) return; setF('comments', c.id, 'deleted', true); setF('comments', c.id, 'deletedAt', Date.now()); logH(c.taskId, '댓글', '댓글 삭제', c.text, ''); render(); },
+  'modal-close': () => closeModal(),
+  'members': () => membersModal(),
+  'trash': () => trashModal(),
+  'activity': () => activityModal(),
+  'export-csv': () => exportCsv(),
+  'export-json': () => download(`planner_data_백업_${today().replace(/-/g,'')}.json`, JSON.stringify(S.db, null, 1), 'application/json'),
+  'switch-user': () => userModal(),
+  'pick-user': el => { S.user = el.dataset.id; localStorage.setItem(LS_USER, S.user); S.modal = null; closeModal(); ensurePlan(); render(); },
+  'user-new': () => { const n = $('#user-new').value.trim(); if (!n) return; S.user = null; const m = create('members', {name:n}); S.db.members[m.id].createdBy = m.id; S.user = m.id; localStorage.setItem(LS_USER, m.id); S.modal = null; closeModal(); ensurePlan(); render(); },
+  'mem-add': () => { const i = $('#mem-new'), n = i.value.trim(); if (!n) return; create('members', {name:n}); i.value = ''; render(); refreshModal(true); $('#mem-new')?.focus(); },
+  'mem-del': el => { const m = S.db.members[el.dataset.id]; if (!confirm(`‘${m.name}’ 구성원을 삭제할까요?\n담당자 지정에서 빠지고, 기존 이력은 유지됩니다.`)) return; setF('members', m.id, 'deleted', true); render(); refreshModal(true); },
+  'lm-add': () => { const n = $('#lm-name').value.trim(); if (!n) return; create('labels', {planId:S.ui.planId, name:n, color:Number($('#lm-color').value)}); render(); refreshModal(true); $('#lm-name')?.focus(); },
+  'lbl-del': el => { const l = S.db.labels[el.dataset.id]; if (!confirm(`‘${l.name}’ 레이블을 삭제할까요? 작업에서도 표시되지 않습니다.`)) return; setF('labels', l.id, 'deleted', true); setF('labels', l.id, 'deletedAt', Date.now()); render(); refreshModal(true); },
+  'restore-task': el => { restoreTask(el.dataset.id); refreshModal(true); },
+  'restore-plan': el => { setF('plans', el.dataset.id, 'deleted', false); render(); refreshModal(true); }
+};
+function addBucket(n){
+  n = (n || '').trim(); if (!n){ S.ui.addingBucket = false; render(); return; }
+  const bs = buckets(S.ui.planId); create('buckets', {planId:S.ui.planId, name:n, order: bs.length ? (bs[bs.length-1].order || 0) + 1 : 0}); S.ui.addingBucket = false; render();
+}
+function delBucket(id){
+  const b = S.db.buckets[id], ts = tasksOf(b.planId).filter(t => effBucket(t) === id);
+  if (buckets(b.planId).length <= 1){ alert('플랜에는 버킷이 하나 이상 있어야 합니다.'); return; }
+  if (!confirm(`‘${b.name}’ 버킷을 삭제할까요?${ts.length ? `\n버킷 안의 작업 ${ts.length}개도 함께 삭제됩니다.` : ''}\n휴지통에 6개월간 보관되며, 버킷을 복원하면 작업도 함께 복원됩니다.`)) return;
+  ts.forEach(t => { if (t.bucketId !== id) setF('tasks', t.id, 'bucketId', id); softDelTask(t.id, `버킷 ‘${b.name}’ 삭제`, id); });
+  setF('buckets', id, 'deleted', true); setF('buckets', id, 'deletedBy', S.user); setF('buckets', id, 'deletedAt', Date.now()); render();
+}
+document.addEventListener('click', e => {
+  const mi = e.target.closest('[data-mi]');
+  if (mi){ const it = S.menuItems[Number(mi.dataset.mi)]; hideMenu(); it?.fn?.(); return; }
+  hideMenu();
+  if (document.body.classList.contains('navopen') && (!e.target.closest('#nav') || e.target.closest('#nav .nav-item')) && !e.target.closest('[data-act="nav-toggle"]')) document.body.classList.remove('navopen');
+  if (e.target.id === 'modal'){ closeModal(); return; }
+  // 상세 패널 바깥(다른 카드·행 제외)을 누르면 패널 닫기
+  if (S.ui.cardPop && !e.target.closest('#cpop') && !e.target.closest('[data-act="card-asg"],[data-act="card-lbl"],[data-act="card-date"]')) closeCardPop();
+  if (S.ui.openTaskId && !e.target.closest('#panel,#ctx,#modal,#cpop,[data-task]')){
+    S.ui.openTaskId = null; S.ui.pop = null; renderPanel(); $$('.card.sel').forEach(c => c.classList.remove('sel'));
+  }
+  if (S.ui.pop && !e.target.closest('.pop') && !e.target.closest('[data-act="pop"]')){ S.ui.pop = null; if (!e.target.closest('[data-act]')) renderPanel(); }
+  if (S.ui.fltOpen && !e.target.closest('.fpanel') && !e.target.closest('[data-act="filter"]')){ S.ui.fltOpen = false; render(); return; }
+  if (S.ui.addingIn && !e.target.closest('.newtask') && !e.target.closest('[data-act="add-task"]')) S.ui.addingIn = null;
+  const el = e.target.closest('[data-act]');
+  if (el && ACT[el.dataset.act]){ if (el.tagName === 'A') e.preventDefault(); ACT[el.dataset.act](el, e); }
+});
+document.addEventListener('contextmenu', e => {
+  const el = e.target.closest('[data-task]'); if (!el || e.target.closest('#panel input,#panel textarea')) return;
+  e.preventDefault(); taskMenu(el.dataset.task, e.clientX, e.clientY);
+});
+
+/* ---------- events: change / input / key ---------- */
+const CHG = {
+  'groupby': el => { S.ui.groupBy = el.value; S.ui.addingIn = null; render(); },
+  'flt': el => { const a = S.ui.filters[el.dataset.k]; const i = a.indexOf(el.value); if (el.checked && i < 0) a.push(el.value); if (!el.checked && i >= 0) a.splice(i,1); render(); },
+  't-title': el => { const v = el.value.trim(); if (!v){ el.value = S.db.tasks[S.ui.openTaskId].title; return; } updateTask(S.ui.openTaskId, 'title', v); },
+  't-bucket': el => updateTask(S.ui.openTaskId, 'bucketId', el.value),
+  't-start': el => setDate(el, 'start'),
+  't-due': el => setDate(el, 'due'),
+  't-notes': el => updateTask(S.ui.openTaskId, 'notes', el.value),
+  'asg': el => { const t = S.db.tasks[el.dataset.t || S.ui.openTaskId]; let a = (t.assignees||[]).filter(x => x !== el.dataset.m); if (el.checked) a.push(el.dataset.m); updateTask(t.id, 'assignees', a); },
+  'lbl': el => { const t = S.db.tasks[el.dataset.t || S.ui.openTaskId]; let a = (t.labels||[]).filter(x => x !== el.dataset.l); if (el.checked) a.push(el.dataset.l); updateTask(t.id, 'labels', a); },
+  'cl-done': el => { const t = S.db.tasks[S.ui.openTaskId], cl = (t.checklist||[]).map(i => i.id === el.dataset.i ? {...i, done: el.checked} : i), it = cl.find(i => i.id === el.dataset.i);
+    updateTask(t.id, 'checklist', cl, {noLog:true, noRender:true}); logH(t.id, '수정', `체크리스트: ${it.text}`, el.checked ? '미완료' : '완료', el.checked ? '완료' : '미완료'); render(); },
+  'cl-text': el => { const t = S.db.tasks[S.ui.openTaskId], old = (t.checklist||[]).find(i => i.id === el.dataset.i), v = el.value.trim(); if (!v || !old || v === old.text) return;
+    updateTask(t.id, 'checklist', t.checklist.map(i => i.id === el.dataset.i ? {...i, text:v} : i), {noLog:true, noRender:true}); logH(t.id, '수정', '체크리스트 항목', old.text, v); render(); },
+  'mem-name': el => { const v = el.value.trim(); if (v && v !== S.db.members[el.dataset.id].name){ setF('members', el.dataset.id, 'name', v); render(); } },
+  'lbl-name': el => { const v = el.value.trim(); if (v && v !== S.db.labels[el.dataset.id].name){ setF('labels', el.dataset.id, 'name', v); render(); } },
+  'lbl-color': el => { setF('labels', el.dataset.id, 'color', Number(el.value)); render(); refreshModal(true); }
+};
+document.addEventListener('change', e => { const el = e.target.closest('[data-chg]'); if (el && CHG[el.dataset.chg]) CHG[el.dataset.chg](el, e); });
+document.addEventListener('input', e => { if (e.target.dataset.inp === 'search'){ S.ui.filters.text = e.target.value; renderContent(); } });
+document.addEventListener('keydown', e => {
+  const k = e.target.dataset?.key;
+  if (k && e.key === 'Enter' && !e.isComposing){
+    e.preventDefault();
+    if (k === 'newtask'){ newTask(e.target.dataset.g, e.target.value); render(); }
+    else if (k === 'newbucket') addBucket(e.target.value);
+    else if (k === 'cl-add'){ const v = e.target.value.trim(); if (!v) return; const t = S.db.tasks[S.ui.openTaskId]; e.target.value = ''; e.target.blur();
+      updateTask(t.id, 'checklist', [...(t.checklist||[]), {id:uid(), text:v, done:false}], {noLog:true, noRender:true}); logH(t.id, '수정', '체크리스트', '', `항목 추가: ${v}`); render(); $('[data-key="cl-add"]')?.focus(); }
+    else if (k === 'lbl-new') ACT['lbl-new'](e.target);
+    else if (k === 'mem-add') ACT['mem-add']();
+    else if (k === 'lm-add') ACT['lm-add']();
+    else if (k === 'user-new') ACT['user-new']();
+    else if (k === 'gf-in') ACT['gf-connect']();
+    return;
+  }
+  if (k && e.key === 'Escape'){ if (k === 'newtask'){ S.ui.addingIn = null; render(); } if (k === 'newbucket'){ S.ui.addingBucket = false; render(); } return; }
+  if (e.target.id === 'cmt-in' && e.key === 'Enter' && e.ctrlKey){ ACT['cmt-add'](); return; }
+  if (e.key === 'Escape'){
+    if ($('#ctx').style.display === 'block'){ hideMenu(); return; }
+    if (S.modal){ closeModal(); return; }
+    if (S.ui.cardPop){ closeCardPop(); return; }
+    if (S.ui.pop){ S.ui.pop = null; renderPanel(); return; }
+    if (S.ui.fltOpen){ S.ui.fltOpen = false; render(); return; }
+    if (S.ui.openTaskId && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)){ S.ui.openTaskId = null; render(); }
+  }
+});
+$('#panel').addEventListener('focusout', () => setTimeout(() => { const ae = document.activeElement; if (S.panelPending && !($('#panel').contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))) renderPanel(); }, 0));
+
+/* ---------- drag & drop ---------- */
+function clearDrop(){ $$('.dropph').forEach(x => x.remove()); $$('.over,.bover,.bover-r').forEach(x => x.classList.remove('over','bover','bover-r')); }
+function afterCard(list, y){
+  const cards = Array.from(list.querySelectorAll('.card:not(.dragging)'));
+  return cards.find(c => { const r = c.getBoundingClientRect(); return y < r.top + r.height / 2; }) || null;
+}
+document.addEventListener('scroll', () => placeCardPop(), true);
+window.addEventListener('resize', () => placeCardPop());
+document.addEventListener('dragstart', e => {
+  closeCardPop();
+  const c = e.target.closest?.('[data-drag-task]');
+  if (c){ S.drag = {type:'task', id:c.dataset.dragTask, from:c.dataset.g || ''}; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.dataset.dragTask); setTimeout(() => c.classList.add('dragging'), 0); hideMenu(); return; }
+  const b = e.target.closest?.('[data-drag-bucket]');
+  if (b){ S.drag = {type:'bucket', id:b.dataset.dragBucket}; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'bucket'); }
+});
+document.addEventListener('dragover', e => {
+  if (!S.drag) return;
+  if (S.drag.type === 'task'){
+    const z = e.target.closest('[data-drop]'); clearDrop();
+    if (!z || z.dataset.nodrop){ e.dataTransfer.dropEffect = 'none'; return; }
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    if (z.dataset.drop === 'col'){ const list = z.querySelector('.cards'), a = afterCard(list, e.clientY), ph = document.createElement('div'); ph.className = 'dropph'; a ? list.insertBefore(ph, a) : list.appendChild(ph); }
+    else z.classList.add('over');
+  } else {
+    const col = e.target.closest('.col[data-bucket]'); clearDrop(); if (!col || col.dataset.bucket === S.drag.id) return;
+    e.preventDefault(); const r = col.getBoundingClientRect(); col.classList.add(e.clientX < r.left + r.width / 2 ? 'bover' : 'bover-r');
+  }
+});
+document.addEventListener('drop', e => {
+  if (!S.drag) return; e.preventDefault();
+  const d = S.drag;
+  if (d.type === 'task'){
+    const z = e.target.closest('[data-drop]');
+    if (z && !z.dataset.nodrop){
+      if (z.dataset.drop === 'col'){
+        const ph = z.querySelector('.dropph'); let nx = ph?.nextElementSibling;
+        while (nx && (!nx.classList.contains('card') || nx.dataset.dragTask === d.id)) nx = nx.nextElementSibling;
+        S.drag = null; clearDrop(); dropTask(d.id, d.from, z.dataset.g, nx ? nx.dataset.dragTask : null);
+      } else { S.drag = null; clearDrop(); updateTask(d.id, 'due', z.dataset.date); }
+    }
+  } else {
+    const col = e.target.closest('.col[data-bucket]');
+    if (col && col.dataset.bucket !== d.id){
+      const r = col.getBoundingClientRect(), before = e.clientX < r.left + r.width / 2;
+      const bs = buckets(S.ui.planId).filter(b => b.id !== d.id), i = bs.findIndex(b => b.id === col.dataset.bucket);
+      const pos = before ? i : i + 1, prev = bs[pos-1], next = bs[pos];
+      const o = prev && next ? ((prev.order||0) + (next.order||0)) / 2 : prev ? (prev.order||0) + 1 : next ? (next.order||0) - 1 : 0;
+      S.drag = null; clearDrop(); setF('buckets', d.id, 'order', o); render();
+    }
+  }
+  S.drag = null; clearDrop();
+});
+document.addEventListener('dragend', () => { $$('.dragging').forEach(x => x.classList.remove('dragging')); clearDrop(); const pend = S.renderPending; S.drag = null; S.renderPending = false; if (pend) render(); });
+
+/* ---------- boot ---------- */
+window.addEventListener('beforeunload', e => { gCacheSave(); if (S.dirty || S.saving){ saveNow(); e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('pagehide', () => gCacheSave());
+window.addEventListener('focus', () => poll(true));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') poll(true); else gCacheSave(); });
+setInterval(poll, 4000);
+setInterval(() => { if (S.mode && S.ui.view !== 'grid' && !S.drag && document.visibilityState === 'visible'){ const td = today(); if (S._td && S._td !== td){ purgeOld(); render(); } S._td = td; } }, 60000);
+(async function boot(){
+  if (msReady()){
+    try { const r = await msHandleRedirect(); if (r?.err){ S.gErr = r.silent ? '로그인이 만료되었습니다. 다시 로그인해 주세요.' : '로그인하지 못했습니다: ' + r.err; localStorage.removeItem(LS_TOK); } }
+    catch(e){ S.gErr = '로그인하지 못했습니다: ' + (e.message || e); }
+    const f = gFolder();
+    if (msTok() && f && !S.gErr){
+      S.gBusy = true; render();
+      try { await gConnect(f); S.gBusy = false; return; }
+      catch(e){
+        S.gBusy = false;
+        if (e.auth && !sessionStorage.getItem(SS_SILENT)){ sessionStorage.setItem(SS_SILENT, '1'); msLogin(true); return; }   // 하루 지나 만료되면 자동으로 조용히 재로그인
+        S.gErr = e.auth ? '로그인이 만료되었습니다. 다시 로그인해 주세요.' : '폴더에 연결하지 못했습니다: ' + (e.message || e);
+        if (e.auth) localStorage.removeItem(LS_TOK);
+      }
+    }
+    if (msTok() || S.gErr){ render(); return; }
+  }
+  if ('showDirectoryPicker' in window){
+    const dir = await idbGet('dir');
+    if (dir){ S.savedDir = dir; try { if ((await dir.queryPermission({mode:'readwrite'})) === 'granted'){ await connectDir(dir); return; } } catch(e){} }
+  }
+  render();
+})();
+</script>
+</body>
+</html>
