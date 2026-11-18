@@ -677,7 +677,7 @@ const P_FILE = 'private_plans.json', P_ITER = 310000, P_IDLE = 10 * 60000, LS_PC
 const P_PATH = `/me/drive/special/approot:/${P_FILE}`;
 /* 비공개 플랜을 쓸 수 있는 계정의 '계정 코드'(Microsoft 계정 ID를 SHA-256으로 바꾼 값 앞 20자리. 이메일·ID 원문은 넣지 않음)
    계정 코드는 로그인 후 '구성원 관리'의 내 이름 줄에 표시됨 */
-const PRIV_OWNERS = [];
+const PRIV_OWNERS = ['62a27da9200033eb1917'];
 async function acctCode(id){
   if (!id) return '';
   const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('teamPlanner:' + String(id).toLowerCase())));
