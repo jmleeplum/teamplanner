@@ -222,6 +222,8 @@ textarea{width:100%;resize:vertical}
 .status .btn{margin-top:6px;padding:3px 10px;font-size:12px}
 .mnav{display:none;font-size:20px;padding:2px 8px}
 #nav .nav-item.over{background:#cfe4fa;box-shadow:inset 0 0 0 2px #0f6cbd}
+#nav .nav-item.pover-t{box-shadow:inset 0 3px 0 #0f6cbd}
+#nav .nav-item.pover-b{box-shadow:inset 0 -3px 0 #0f6cbd}
 /* 휴대폰 화면 */
 @media (hover:none){ .cfoot .ib{visibility:visible} }
 @supports (height:100dvh){ body,#app,.start,#panel{height:100dvh} }
@@ -345,7 +347,9 @@ function splitDb(db, priv){ const o = {schema:1}; COLLS.forEach(c => { o[c] = {}
 const pubDb = db => splitDb(db, false), privDb = db => splitDb(db, true);
 
 const act = c => Object.values(S.db[c]).filter(x => !x.deleted);
-const plans = () => act('plans').sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+/* 플랜 순서: order(사용자가 정한 순서)가 있으면 그 순서, 없는 플랜(새로 만든 것 등)은 맨 뒤에 만든 순서대로 */
+const planOrd = p => typeof p.order === 'number' ? p.order : Infinity;
+const plans = () => act('plans').sort((a,b) => (planOrd(a) - planOrd(b)) || ((a.createdAt||0) - (b.createdAt||0)));
 const buckets = pid => act('buckets').filter(b => b.planId === pid).sort((a,b) => (a.order||0) - (b.order||0));
 const labelsOf = pid => act('labels').filter(l => l.planId === pid).sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
 const members = () => act('members').sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
@@ -678,6 +682,9 @@ const P_PATH = `/me/drive/special/approot:/${P_FILE}`;
 /* 비공개 플랜을 쓸 수 있는 계정의 '계정 코드'(Microsoft 계정 ID를 SHA-256으로 바꾼 값 앞 20자리. 이메일·ID 원문은 넣지 않음)
    계정 코드는 로그인 후 '구성원 관리'의 내 이름 줄에 표시됨 */
 const PRIV_OWNERS = ['62a27da9200033eb1917'];
+const APP_VER = '2026-11-18e';                                   // 화면 왼쪽 아래에 표시(어느 버전이 열렸는지 확인용)
+const DIAG = new URLSearchParams(location.search).has('diag') || sessionStorage.getItem('teamPlanner.diag') === '1';   // 주소 끝 ?diag → 계정 코드·판정 표시
+if (DIAG) sessionStorage.setItem('teamPlanner.diag', '1');
 async function acctCode(id){
   if (!id) return '';
   const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('teamPlanner:' + String(id).toLowerCase())));
@@ -995,7 +1002,7 @@ function renderStart(){
 }
 function navHtml(){
   const pid = S.ui.view === 'my' ? null : S.ui.planId;
-  const planItem = p => `<div class="nav-item ${p.id === pid ? 'active' : ''}" data-act="plan-open" data-id="${p.id}" data-drop="plan" data-pid="${p.id}" title="카드나 버킷을 끌어다 놓으면 이 플랜으로 옮깁니다">${planDot(p)}<span style="overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span></div>`;
+  const planItem = p => `<div class="nav-item ${p.id === pid ? 'active' : ''}" data-act="plan-open" data-id="${p.id}" data-drop="plan" data-pid="${p.id}" draggable="true" data-drag-plan="${p.id}" title="끌어서 플랜 순서를 바꿉니다. 카드나 버킷을 끌어다 놓으면 이 플랜으로 옮깁니다">${planDot(p)}<span style="overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span></div>`;
   return `<nav id="nav">
     <div class="brand">▦ 팀 플래너</div>
     <div class="nav-item ${S.ui.view === 'my' ? 'active' : ''}" data-act="my">👤 내 작업</div>
@@ -1015,6 +1022,7 @@ function navHtml(){
       ${S.mode === 'graph' ? `<div class="nav-item" data-act="gf-change" title="다른 폴더 연결">☁ 폴더 연결 해제</div><div class="nav-item" data-act="ms-logout" title="${esc(msTok()?.hint || '')}">⎋ 로그아웃 <span class="muted">${esc(msTok()?.name || '')}</span></div>` : ''}
       <div class="nav-item" data-act="switch-user" title="사용자 변경">${S.user && isMember(S.user) ? avatar(S.user,'sm') : ''}<span>${esc(myName())}</span><span class="muted">${S.mode === 'graph' ? '(이름 변경)' : '(변경)'}</span></div>
       <div id="status" class="status ${S.mode === 'local' ? 'local' : S.status.kind}">${statusHtml()}</div>
+      <div class="muted" style="padding:0 16px 6px;font-size:11px">웹 버전 ${APP_VER}</div>
     </div></nav>`;
 }
 function mainHtml(){
@@ -1331,8 +1339,8 @@ function trashModal(){
 }
 function membersModal(){
   openModal(() => ({title:`구성원 관리 <span class="muted" style="margin-left:8px;font-weight:400">${members().length}명</span>`, body: `
-    ${members().map(m => `<div class="mrow">${avatar(m.id)}<input type="text" data-chg="mem-name" data-id="${m.id}" value="${esc(m.name)}"><span class="muted" style="min-width:120px;word-break:break-all">${m.email ? '☁ ' + esc(m.email) : '계정 미연결'}</span>${m.id === S.user ? '<span class="muted">나</span>' : `<button class="btn danger" data-act="mem-del" data-id="${m.id}">삭제</button>`}</div>`).join('')}
-    ${pOwner() && S.g.acctCode ? `<div class="mrow" style="margin-top:6px;font-size:13px">내 계정 코드 <code style="background:#f3f2f1;padding:2px 6px;border-radius:4px;user-select:all">${esc(S.g.acctCode)}</code><button class="btn" data-act="copy-code">복사</button><span class="muted">${S.g.owner ? '비공개 플랜 사용 가능' : '비공개 플랜 미지정 계정'}</span></div>` : ''}
+    ${members().map(m => `<div class="mrow">${avatar(m.id)}<input type="text" data-chg="mem-name" data-id="${m.id}" value="${esc(m.name)}"><span style="min-width:170px;font-size:13px;word-break:break-all;color:${m.email ? '#0f548c' : '#a19f9d'}" title="연동된 Microsoft 계정">${m.email ? '☁ ' + esc(m.email) : '계정 미연결'}</span>${m.id === S.user ? '<span class="muted">나</span>' : `<button class="btn danger" data-act="mem-del" data-id="${m.id}">삭제</button>`}</div>`).join('')}
+    ${(pOwner() || DIAG) && S.g.acctCode ? `<div class="mrow" style="margin-top:6px;font-size:13px">내 계정 코드 <code style="background:#f3f2f1;padding:2px 6px;border-radius:4px;user-select:all">${esc(S.g.acctCode)}</code><button class="btn" data-act="copy-code">복사</button><span class="muted">${S.g.owner ? '비공개 플랜 사용 가능' : '비공개 플랜 미지정 계정'} · 로그인 ${esc(S.me?.email || '')}</span></div>` : ''}
     <div class="mrow" style="margin-top:10px"><input type="text" id="mem-new" data-key="mem-add" placeholder="새 구성원 이름"><button class="btn primary" data-act="mem-add">추가</button></div>
     <div class="muted" style="margin-top:8px;line-height:1.6">구성원은 모든 플랜에서 담당자로 지정할 수 있습니다. 삭제해도 기존 이력의 이름은 남습니다.<br>Microsoft 계정과 이름은 1:1로 연결되며, 연결된 계정은 바꿀 수 없습니다(이름만 변경 가능). 여기서 추가한 이름은 ‘계정 미연결’ 상태로, 그 사람이 처음 로그인할 때 한 번 연결할 수 있습니다.</div>`}));
 }
@@ -1521,6 +1529,22 @@ function planMoveModal(kind, id){
       + `<div class="muted" style="margin-top:8px">${S.db.plans[src.planId]?.priv ? '비공개 플랜끼리만 옮길 수 있습니다.' : '공유 플랜끼리만 옮길 수 있습니다. 비공개 플랜으로는 옮길 수 없습니다.'}</div>`};
   });
 }
+/* 플랜 순서 바꾸기 (공유 플랜끼리, 비공개 플랜끼리 따로) */
+function reorderPlan(id, targetId, after){
+  const p = S.db.plans[id]; if (!p) return;
+  const list = plans().filter(x => !!x.priv === !!p.priv && x.id !== id);
+  let i = targetId ? list.findIndex(x => x.id === targetId) : list.length;
+  if (i < 0) i = list.length; else if (after && targetId) i++;
+  list.splice(i, 0, p);
+  list.forEach((x, k) => { if (x.order !== k) setF('plans', x.id, 'order', k); });
+  render();
+}
+function nudgePlan(id, d){
+  const p = S.db.plans[id]; if (!p) return;
+  const list = plans().filter(x => !!x.priv === !!p.priv), i = list.findIndex(x => x.id === id), j = i + d;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  reorderPlan(id, list[j].id, d > 0);
+}
 function nudgeTask(id, d){
   const t = S.db.tasks[id]; if (!t) return;
   const list = byOrder(tasksOf(t.planId).filter(x => effBucket(x) === effBucket(t) && !!x.done === !!t.done && passFilter(x)));
@@ -1578,6 +1602,7 @@ const ACT = {
   'plan-rename': () => { const p = curPlan(); const n = prompt('플랜 이름', p.name); if (n && n.trim() && n !== p.name){ setF('plans', p.id, 'name', n.trim()); render(); } },
   'plan-menu': (el, e) => { const p = curPlan(); const r = el.getBoundingClientRect(); showMenu(r.left - 140, r.bottom + 4, [
       {label:'✏ 이름 바꾸기', fn: ACT['plan-rename']}, {label:'🏷 레이블 관리', fn:() => labelsModal(p.id)},
+      {sep:true}, {label:'⬆ 플랜 위로', fn:() => nudgePlan(p.id, -1)}, {label:'⬇ 플랜 아래로', fn:() => nudgePlan(p.id, 1)},
       {sep:true}, {label:'🗑 플랜 삭제', danger:true, fn:() => { if (!confirm(`‘${p.name}’ 플랜을 삭제할까요?\n휴지통에서 복원할 수 있습니다.`)) return; setF('plans', p.id, 'deleted', true); setF('plans', p.id, 'deletedBy', S.user); setF('plans', p.id, 'deletedAt', Date.now()); S.ui.openTaskId = null; S.ui.planId = plans()[0]?.id || null; ensurePlan(); render(); }}]); },
   'view': el => { S.ui.view = el.dataset.v; render(); },
   'filter': () => { S.ui.fltOpen = !S.ui.fltOpen; render(); },
@@ -1744,7 +1769,7 @@ document.addEventListener('keydown', e => {
 $('#panel').addEventListener('focusout', () => setTimeout(() => { const ae = document.activeElement; if (S.panelPending && !($('#panel').contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))) renderPanel(); }, 0));
 
 /* ---------- drag & drop ---------- */
-function clearDrop(){ $$('.dropph').forEach(x => x.remove()); $$('.over,.bover,.bover-r').forEach(x => x.classList.remove('over','bover','bover-r')); }
+function clearDrop(){ $$('.dropph').forEach(x => x.remove()); $$('.over,.bover,.bover-r,.pover-t,.pover-b').forEach(x => x.classList.remove('over','bover','bover-r','pover-t','pover-b')); }
 function afterCard(list, y){
   const cards = Array.from(list.querySelectorAll('.card:not(.dragging)'));
   return cards.find(c => { const r = c.getBoundingClientRect(); return y < r.top + r.height / 2; }) || null;
@@ -1753,6 +1778,8 @@ document.addEventListener('scroll', () => placeCardPop(), true);
 window.addEventListener('resize', () => placeCardPop());
 document.addEventListener('dragstart', e => {
   closeCardPop();
+  const pl = e.target.closest?.('[data-drag-plan]');
+  if (pl){ S.drag = {type:'plan', id:pl.dataset.dragPlan}; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'plan'); hideMenu(); return; }
   const c = e.target.closest?.('[data-drag-task]');
   if (c){ S.drag = {type:'task', id:c.dataset.dragTask, from:c.dataset.g || ''}; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.dataset.dragTask); setTimeout(() => c.classList.add('dragging'), 0); hideMenu(); return; }
   const b = e.target.closest?.('[data-drag-bucket]');
@@ -1761,6 +1788,13 @@ document.addEventListener('dragstart', e => {
 document.addEventListener('dragover', e => {
   if (!S.drag) return;
   const np = e.target.closest('[data-drop="plan"]');
+  if (S.drag.type === 'plan'){                        // 플랜 순서 바꾸기: 같은 구역(공유/비공개) 플랜 위·아래에 표시
+    clearDrop();
+    const src = S.db.plans[S.drag.id], tp = np && S.db.plans[np.dataset.pid];
+    if (!src || !tp || tp.id === src.id || !!tp.priv !== !!src.priv){ e.dataTransfer.dropEffect = 'none'; return; }
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    const r = np.getBoundingClientRect(); np.classList.add(e.clientY < r.top + r.height / 2 ? 'pover-t' : 'pover-b'); return;
+  }
   if (np){                                            // 왼쪽 메뉴의 플랜 위: 다른 플랜으로 이동
     clearDrop();
     const src = S.drag.type === 'task' ? S.db.tasks[S.drag.id] : S.db.buckets[S.drag.id];
@@ -1782,6 +1816,12 @@ document.addEventListener('drop', e => {
   if (!S.drag) return; e.preventDefault();
   const d = S.drag;
   const np = e.target.closest('[data-drop="plan"]');
+  if (d.type === 'plan'){
+    S.drag = null; clearDrop();
+    const src = S.db.plans[d.id], tp = np && S.db.plans[np.dataset.pid];
+    if (src && tp && tp.id !== src.id && !!tp.priv === !!src.priv){ const r = np.getBoundingClientRect(); reorderPlan(d.id, tp.id, e.clientY >= r.top + r.height / 2); }
+    return;
+  }
   if (np){
     S.drag = null; clearDrop(); $$('.dragging').forEach(x => x.classList.remove('dragging'));
     d.type === 'task' ? moveTaskToPlan(d.id, np.dataset.pid) : moveBucketToPlan(d.id, np.dataset.pid);
