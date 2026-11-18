@@ -221,6 +221,7 @@ textarea{width:100%;resize:vertical}
 .status.auth .dot{background:#d13438}.status.auth{color:#a4262c}
 .status .btn{margin-top:6px;padding:3px 10px;font-size:12px}
 .mnav{display:none;font-size:20px;padding:2px 8px}
+#nav .nav-item.over{background:#cfe4fa;box-shadow:inset 0 0 0 2px #0f6cbd}
 /* 휴대폰 화면 */
 @media (hover:none){ .cfoot .ib{visibility:visible} }
 @supports (height:100dvh){ body,#app,.start,#panel{height:100dvh} }
@@ -333,10 +334,15 @@ function merge(a, b){
 function create(c, obj){
   const t = now();
   const e = Object.assign({id: uid()}, obj, {deleted:false, createdBy:S.user, createdAt:Date.now()});
+  const pid = obj.planId || (obj.taskId && S.db.tasks[obj.taskId]?.planId);   // 비공개 플랜에 속한 항목은 priv 표시 → 공유 파일에 쓰지 않음
+  if ((c === 'plans' && obj.priv) || (pid && S.db.plans[pid]?.priv)) e.priv = true;
   e._v = {}; for (const k of Object.keys(e)) if (k !== 'id' && k !== '_v') e._v[k] = t;
-  S.db[c][e.id] = e; markDirty(); return e;
+  S.db[c][e.id] = e; markDirty(e); return e;
 }
-function setF(c, id, f, v){ const e = S.db[c][id]; if (!e) return; e[f] = v; e._v = e._v || {}; e._v[f] = now(); markDirty(); }
+function setF(c, id, f, v){ const e = S.db[c][id]; if (!e) return; e[f] = v; e._v = e._v || {}; e._v[f] = now(); markDirty(e); }
+/* 공유 파일용(비공개 항목 제외) / 비공개 파일용(비공개 항목만) 사본 */
+function splitDb(db, priv){ const o = {schema:1}; COLLS.forEach(c => { o[c] = {}; for (const [id, e] of Object.entries(db[c] || {})) if (!!e.priv === priv) o[c][id] = e; }); return o; }
+const pubDb = db => splitDb(db, false), privDb = db => splitDb(db, true);
 
 const act = c => Object.values(S.db[c]).filter(x => !x.deleted);
 const plans = () => act('plans').sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
@@ -397,7 +403,7 @@ async function pullRemote(){
   for (const c of conf){ try { remote = merge(remote, normDb((await readJson(c.h)).data)); } catch(e){} }
   return {remote, lm: r.lm, conf};
 }
-function markDirty(){ S.dirty = true; scheduleSave(); }
+function markDirty(e){ if (e?.priv){ pMarkDirty(); return; } S.dirty = true; scheduleSave(); }
 function scheduleSave(){ clearTimeout(S.saveTimer); S.saveTimer = setTimeout(saveNow, 700); }
 async function saveNow(){
   if (!S.mode) return;
@@ -444,6 +450,7 @@ async function poll(force){
       if (JSON.stringify(S.db) !== before){ gCacheSave(); render(); }
       if (S.status.kind === 'err' && !S.dirty) setStatus('ok');
     } catch(e){ e.auth ? setStatus('auth', e.message) : setStatus('err', e.message || String(e)); }
+    await pPoll();
     return;
   }
   if (S.mode !== 'file' || S.saving || S.drag) return;
@@ -534,7 +541,8 @@ async function msToken(){
   throw Object.assign(new Error('로그인이 만료되었습니다.'), {auth: true});
 }
 function msLogout(){
-  if (S.dirty && !confirm('아직 저장되지 않은 변경이 있습니다. 그래도 로그아웃할까요?')) return;
+  if ((S.dirty || S.p.dirty) && !confirm('아직 저장되지 않은 변경이 있습니다. 그래도 로그아웃할까요?')) return;
+  pDrop(); localStorage.removeItem(LS_PCACHE);
   [LS_TOK, LS_GF, LS_GCACHE, LS_USER].forEach(k => localStorage.removeItem(k)); S.user = null; S.me = null;
   S.mode = null; S.g = {}; S.db = emptyDb(); S.gErr = ''; render();
 }
@@ -613,7 +621,7 @@ async function gSave(){
     S.db = merge(S.db, remote);
     const q = etag ? '' : '?@microsoft.graph.conflictBehavior=fail';
     const r = await gfetch(`${gBase()}:/${encPath(FILE)}:/content${q}`, {method: 'PUT',
-      headers: Object.assign({'Content-Type': 'application/json'}, etag ? {'If-Match': etag} : {}), body: JSON.stringify(S.db)});
+      headers: Object.assign({'Content-Type': 'application/json'}, etag ? {'If-Match': etag} : {}), body: JSON.stringify(pubDb(S.db))});
     const txt = await r.text();
     if ((r.status === 412 || r.status === 409) && i < 5){ S.g.etag = '__stale__'; continue; }
     if (!r.ok) throw gErr(r, txt);
@@ -625,7 +633,7 @@ async function gSave(){
 }
 async function gBackup(name){
   if (await gMeta(`backup/${name}`)) return;
-  const put = () => gfetch(`${gBase()}:/backup/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=fail`, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(S.db)});
+  const put = () => gfetch(`${gBase()}:/backup/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=fail`, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(pubDb(S.db))});
   let r = await put();
   if (!r.ok && r.status !== 409){
     await gfetch(`${gBase()}/children`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: 'backup', folder: {}, '@microsoft.graph.conflictBehavior': 'fail'})});
@@ -634,7 +642,7 @@ async function gBackup(name){
 }
 /* 이 기기 임시 보관(로그인 만료·연결 끊김 때 수정분 보존). 다음 연결 때 병합 */
 const gKey = () => `${S.g.driveId}/${S.g.folderId}`;
-function gCacheSave(){ if (S.mode !== 'graph') return; try { localStorage.setItem(LS_GCACHE, JSON.stringify({key: gKey(), dirty: S.dirty, db: S.db})); } catch(e){} }
+function gCacheSave(){ if (S.mode !== 'graph') return; try { localStorage.setItem(LS_GCACHE, JSON.stringify({key: gKey(), dirty: S.dirty, db: pubDb(S.db)})); } catch(e){} pCacheSave(); }
 async function gConnect(f){
   S.g = {driveId: f.driveId, folderId: f.folderId, name: f.name, etag: null, confAt: 0, polledAt: Date.now()};
   const {remote, etag, conf} = await gPull(true);
@@ -643,6 +651,8 @@ async function gConnect(f){
   if (c && c.key === gKey() && c.db){ const m = merge(db, normDb(c.db)); fromCache = JSON.stringify(m) !== JSON.stringify(db); db = m; }
   const me = await gjson('/me?$select=id,displayName,userPrincipalName,mail');
   S.me = {id: me.id || '', email: (me.userPrincipalName || me.mail || '').toLowerCase(), name: me.displayName || ''};
+  try { const md = await gjson('/me/drive?$select=id'); S.g.owner = !!md.id && md.id.toLowerCase() === String(f.driveId).toLowerCase(); } catch(e){ S.g.owner = false; }   // 공유 폴더 소유자만 비공개 플랜 사용
+  pDrop();
   S.db = db; S.g.etag = etag; S.mode = 'graph'; S.dir = null; S.gErr = '';
   localStorage.setItem(LS_GF, JSON.stringify(f)); sessionStorage.removeItem(SS_SILENT);
   setStatus('ok');
@@ -654,6 +664,172 @@ async function gStart(input){
   try { await gConnect(await gResolve(input)); }
   catch(e){ S.gErr = e.status === 403 ? '이 폴더에 접근할 권한이 없습니다. 편집 권한으로 공유받았는지 확인해 주세요.' : e.status === 404 ? '폴더를 찾지 못했습니다. 링크나 경로를 확인해 주세요.' : (e.message || String(e)); if (e.auth){ S.gErr = '로그인이 만료되었습니다. 다시 로그인해 주세요.'; } }
   S.gBusy = false; if (S.mode !== 'graph') render();
+}
+
+/* =========================================================
+   비공개 플랜 — 공유 폴더 소유자 본인만 사용
+   · 저장 위치: 본인 OneDrive의 앱 폴더(앱/팀플래너/private_plans.json). 공유 파일·백업에는 들어가지 않음
+   · 내용은 암호로 암호화(PBKDF2-SHA256 → AES-GCM 256). 암호를 잊으면 복구 불가
+   · 마지막 조작 후 10분이 지나면 자동으로 잠김(화면에서 비공개 항목을 모두 지움)
+   ========================================================= */
+const P_FILE = 'private_plans.json', P_ITER = 310000, P_IDLE = 10 * 60000, LS_PCACHE = 'teamPlanner.pCache';
+const P_PATH = `/me/drive/special/approot:/${P_FILE}`;
+S.p = {key: null};
+const pOwner = () => S.mode === 'graph' && !!S.g.owner;
+const pOpen = () => !!S.p.key;
+function b64e(bytes){ let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); }
+function b64d(s){ const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+async function pDerive(pw, salt, iter){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter}, base, {name: 'AES-GCM', length: 256}, false, ['encrypt', 'decrypt']);
+}
+async function pEncrypt(obj, key = S.p.key, salt = S.p.salt, iter = S.p.iter){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({name: 'AES-GCM', iv}, key, new TextEncoder().encode(JSON.stringify(obj))));
+  return {app: 'teamPlanner-private', v: 1, kdf: 'PBKDF2-SHA256', iter, salt: b64e(salt), iv: b64e(iv), ct: b64e(ct)};
+}
+async function pDecrypt(env, key){   // 암호가 틀리면 예외(AES-GCM 인증 실패)
+  const pt = await crypto.subtle.decrypt({name: 'AES-GCM', iv: b64d(env.iv)}, key, b64d(env.ct));
+  const d = normDb(JSON.parse(new TextDecoder().decode(pt)));
+  COLLS.forEach(c => Object.values(d[c]).forEach(e => e.priv = true));
+  return d;
+}
+async function pMeta(){ const r = await gfetch(P_PATH); const txt = await r.text(); if (r.status === 404) return null; if (!r.ok) throw gErr(r, txt); return JSON.parse(txt); }
+async function pEnvelope(meta){ const j = await gDownload(meta); if (!j || !j.ct) throw new Error('비공개 파일 형식이 올바르지 않습니다.'); return j; }
+function pMarkDirty(){ if (!pOpen()) return; S.p.dirty = true; clearTimeout(S.p.timer); S.p.timer = setTimeout(pSave, 700); }
+/* 저장: 읽기 → 복호화·병합 → 암호화 → eTag가 그대로일 때만 쓰기 (다른 기기에서 고친 내용과 합침) */
+async function pSave(){
+  if (!pOpen()) return;
+  if (S.p.saving){ S.p.again = true; return; }
+  if (!S.p.dirty) return;
+  const P = S.p; P.saving = true; P.dirty = false;
+  try {
+    for (let i = 0; ; i++){
+      const meta = await pMeta();
+      if (meta && meta.eTag !== P.etag){ const d = await pDecrypt(await pEnvelope(meta), P.key); if (S.p !== P) throw new Error('잠김'); const b = JSON.stringify(privDb(S.db)); S.db = merge(S.db, d); P.etag = meta.eTag; if (JSON.stringify(privDb(S.db)) !== b) P.changed = true; }
+      if (S.p !== P) throw new Error('잠김');          // 잠근 뒤에는 (비어 있는) 화면 데이터로 덮어쓰지 않음
+      const body = JSON.stringify(await pEncrypt(privDb(S.db), P.key, P.salt, P.iter));
+      const q = meta ? '' : '?@microsoft.graph.conflictBehavior=fail';
+      const r = await gfetch(`${P_PATH}:/content${q}`, {method: 'PUT', headers: Object.assign({'Content-Type': 'application/json'}, meta ? {'If-Match': meta.eTag} : {}), body});
+      const txt = await r.text();
+      if ((r.status === 412 || r.status === 409) && i < 5){ P.etag = '__stale__'; continue; }
+      if (!r.ok) throw gErr(r, txt);
+      P.etag = JSON.parse(txt).eTag; break;
+    }
+    P.err = ''; if (!P.dirty) localStorage.removeItem(LS_PCACHE);
+  } catch(e){
+    P.err = e.message || String(e); P.dirty = true;
+    if (S.p === P){ pCacheSave(); if (!e.auth) setTimeout(() => { if (S.p === P) pSave(); }, 5000); }
+  }
+  P.saving = false;
+  if (P.again && S.p === P){ P.again = false; pSave(); }
+  else if (S.p === P){ if (P.changed){ P.changed = false; render(); } else renderNavOnly(); }
+}
+/* 저장 못 한 비공개 수정분은 이 기기에 '암호화한 채로' 보관했다가 다음에 잠금 해제할 때 합침 */
+async function pCacheSave(){
+  if (!pOpen() || !S.p.dirty) return;
+  try { localStorage.setItem(LS_PCACHE, JSON.stringify(Object.assign(await pEncrypt(privDb(S.db)), {owner: S.me?.id || ''}))); } catch(e){}
+}
+async function pPoll(){
+  if (!pOpen() || S.p.saving || S.p.dirty || S.p.locking) return;
+  const P = S.p;
+  try {
+    const meta = await pMeta(); if (!meta || meta.eTag === P.etag) return;
+    const d = await pDecrypt(await pEnvelope(meta), P.key);
+    if (S.p !== P || P.saving || P.dirty) return;
+    const before = JSON.stringify(privDb(S.db));
+    S.db = merge(S.db, d); P.etag = meta.eTag;
+    if (JSON.stringify(privDb(S.db)) !== before) render();
+  } catch(e){}
+}
+async function pUnlock(pw){
+  const meta = await pMeta();
+  if (!meta) throw new Error('비공개 플랜 파일이 없습니다. 새로 만들어 주세요.');
+  const env = await pEnvelope(meta), salt = b64d(env.salt), iter = env.iter || P_ITER;
+  const key = await pDerive(pw, salt, iter);
+  let d; try { d = await pDecrypt(env, key); } catch(e){ throw new Error('암호가 맞지 않습니다.'); }
+  S.p = {key, salt, iter, etag: meta.eTag, act: Date.now()};
+  S.db = merge(S.db, d);
+  const c = lsJson(LS_PCACHE);                        // 이전에 저장하지 못한 수정분
+  if (c && c.ct && c.salt === env.salt && (!c.owner || c.owner === S.me?.id)){ try { S.db = merge(S.db, await pDecrypt(c, key)); S.p.dirty = true; pSave(); } catch(e){} }
+}
+async function pCreate(pw){
+  if (await pMeta()) throw new Error('이미 비공개 플랜 파일이 있습니다. 암호를 입력해 열어 주세요.');
+  const salt = crypto.getRandomValues(new Uint8Array(16)), key = await pDerive(pw, salt, P_ITER);
+  S.p = {key, salt, iter: P_ITER, etag: null, act: Date.now()};
+  localStorage.removeItem(LS_PCACHE);
+  const p = create('plans', {name: '내 비공개 플랜', priv: true}); create('buckets', {planId: p.id, name: '할 일', order: 0});
+  await pSave(); if (S.p.err) throw new Error('저장하지 못했습니다: ' + S.p.err);
+  S.ui.planId = p.id; S.ui.view = 'board';
+}
+async function pChangePw(cur, nw){
+  const env = await pEnvelope(await pMeta());
+  try { await pDecrypt(env, await pDerive(cur, b64d(env.salt), env.iter || P_ITER)); } catch(e){ throw new Error('현재 암호가 맞지 않습니다.'); }
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  S.p.key = await pDerive(nw, salt, P_ITER); S.p.salt = salt; S.p.iter = P_ITER;
+  localStorage.removeItem(LS_PCACHE);
+  S.p.dirty = true; await pSave(); if (S.p.err) throw new Error('저장하지 못했습니다: ' + S.p.err);
+}
+async function pReset(){
+  const meta = await pMeta();
+  if (meta){ const r = await gfetch(`/me/drive/items/${meta.id}`, {method: 'DELETE'}); if (!r.ok && r.status !== 404) throw gErr(r, await r.text()); }
+  localStorage.removeItem(LS_PCACHE); pDrop();
+}
+/* 잠금: 저장(실패하면 이 기기에 암호화 보관) 후 화면 데이터에서 비공개 항목을 모두 지움 */
+async function pLock(){
+  if (!pOpen() || S.p.locking) return;
+  const P = S.p; P.locking = true; clearTimeout(P.timer);
+  for (let i = 0; P.saving && i < 100; i++) await new Promise(r => setTimeout(r, 100));
+  if (P.dirty){ await pSave(); if (P.dirty) await pCacheSave(); }
+  if (S.p !== P) return;
+  pDrop(); render();
+}
+function pDrop(){
+  COLLS.forEach(c => { for (const [id, e] of Object.entries(S.db[c])) if (e.priv) delete S.db[c][id]; });
+  S.p = {key: null};
+  if (S.ui.openTaskId && !S.db.tasks[S.ui.openTaskId]) S.ui.openTaskId = null;
+  if (S.ui.cardPop && !S.db.tasks[S.ui.cardPop.id]) S.ui.cardPop = null;
+  if (S.modal && !S.modal.locked){ S.modal = null; $('#modal').className = ''; $('#modal').innerHTML = ''; }   // 비공개 내용이 보일 수 있는 창(이력·휴지통 등)도 닫음
+  hideMenu();
+}
+const pTouch = () => { if (pOpen()) S.p.act = Date.now(); };
+setInterval(() => { if (pOpen() && Date.now() - (S.p.act || 0) > P_IDLE) pLock(); }, 15000);
+['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => document.addEventListener(ev, pTouch, {capture: true, passive: true}));
+function renderNavOnly(){ const n = $('#nav'); if (!n || S.drag) return; const t = document.createElement('div'); t.innerHTML = navHtml(); n.replaceWith(t.firstElementChild); }
+function privModal(mode){
+  openModal(() => {
+    const exists = mode !== 'create' && mode !== 'change';
+    if (mode === 'change') return {title: '비공개 플랜 암호 변경', body: `
+      <input type="password" class="full" id="pw-cur" placeholder="현재 암호" autocomplete="current-password" style="width:100%;margin-bottom:8px">
+      <input type="password" class="full" id="pw-new" placeholder="새 암호 (6자 이상)" autocomplete="new-password" style="width:100%;margin-bottom:8px">
+      <input type="password" class="full" id="pw-new2" data-key="pw-change" placeholder="새 암호 확인" autocomplete="new-password" style="width:100%">
+      ${S.p.msg ? `<div class="warn">${esc(S.p.msg)}</div>` : ''}
+      <div style="text-align:right;margin-top:12px"><button class="btn primary" data-act="pw-change" ${S.p.busy ? 'disabled' : ''}>${S.p.busy ? '처리 중…' : '암호 변경'}</button></div>`};
+    if (!exists) return {title: '비공개 플랜 만들기 — 암호 정하기', body: `
+      <p style="margin-top:0;line-height:1.6">비공개 플랜은 <b>내 OneDrive의 ‘앱 › 팀플래너’ 폴더</b>에 암호화해서 저장됩니다. 팀 공유 파일에는 들어가지 않아 다른 사람은 볼 수 없습니다.</p>
+      <div class="warn" style="margin-top:0">암호를 잊으면 누구도 내용을 되살릴 수 없습니다. 암호를 따로 적어 두세요.</div>
+      <input type="password" id="pw-new" placeholder="암호 (6자 이상)" autocomplete="new-password" style="width:100%;margin:12px 0 8px">
+      <input type="password" id="pw-new2" data-key="pw-create" placeholder="암호 확인" autocomplete="new-password" style="width:100%">
+      ${S.p.msg ? `<div class="warn">${esc(S.p.msg)}</div>` : ''}
+      <div style="text-align:right;margin-top:12px"><button class="btn primary" data-act="pw-create" ${S.p.busy ? 'disabled' : ''}>${S.p.busy ? '만드는 중…' : '만들기'}</button></div>`};
+    return {title: '🔒 비공개 플랜 열기', body: `
+      <p style="margin-top:0">비공개 플랜 암호를 입력하세요. 마지막 조작 후 10분이 지나면 다시 잠깁니다.</p>
+      <input type="password" id="pw-in" data-key="pw-unlock" placeholder="암호" autocomplete="current-password" style="width:100%">
+      ${S.p.msg ? `<div class="warn">${esc(S.p.msg)}</div>` : ''}
+      <div style="display:flex;align-items:center;margin-top:12px"><button class="linkbtn" data-act="pw-forgot">암호를 잊었어요</button><span style="flex:1"></span><button class="btn primary" data-act="pw-unlock" ${S.p.busy ? 'disabled' : ''}>${S.p.busy ? '여는 중…' : '열기'}</button></div>`};
+  });
+  S.modal.priv = mode === 'change';
+  setTimeout(() => $('#modal input[type=password]')?.focus(), 30);
+}
+async function pRun(fn, okMsg){
+  S.p.busy = true; S.p.msg = ''; refreshModal(true);
+  try { await fn(); S.p.busy = false; S.p.msg = ''; S.modal = null; closeModal(); render(); if (okMsg) setTimeout(() => alert(okMsg), 50); }
+  catch(e){ S.p.busy = false; S.p.msg = e.auth ? '로그인이 만료되었습니다. 다시 로그인해 주세요.' : (e.message || String(e)); refreshModal(true); setTimeout(() => $('#modal input[type=password]')?.focus(), 30); }
+}
+async function pOpenFlow(){
+  S.p.msg = '';
+  try { privModal((await pMeta()) ? 'unlock' : 'create'); }
+  catch(e){ alert('비공개 플랜 파일을 확인하지 못했습니다: ' + (e.message || e)); }
 }
 
 /* ---------- connect ---------- */
@@ -759,7 +935,8 @@ function render(){
   saveUi();
   if (!S.mode){ renderStart(); return; }
   if (S.drag){ S.renderPending = true; return; }
-  if (curPlan() == null && S.ui.view !== 'my' && plans().length) S.ui.planId = plans()[0].id;
+  if (curPlan() == null && S.ui.view !== 'my' && plans().length) S.ui.planId = (plans().find(p => !p.priv) || plans()[0]).id;
+  if (curPlan()?.priv && S.ui.groupBy === 'assignee') S.ui.groupBy = 'bucket';     // 비공개 플랜은 담당자 지정 불가
   saveScroll();
   $('#app').innerHTML = navHtml() + `<main id="main">${mainHtml()}</main>`;
   restoreScroll();
@@ -809,11 +986,17 @@ function renderStart(){
 }
 function navHtml(){
   const pid = S.ui.view === 'my' ? null : S.ui.planId;
+  const planItem = p => `<div class="nav-item ${p.id === pid ? 'active' : ''}" data-act="plan-open" data-id="${p.id}" data-drop="plan" data-pid="${p.id}" title="카드나 버킷을 끌어다 놓으면 이 플랜으로 옮깁니다">${planDot(p)}<span style="overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span></div>`;
   return `<nav id="nav">
     <div class="brand">▦ 팀 플래너</div>
     <div class="nav-item ${S.ui.view === 'my' ? 'active' : ''}" data-act="my">👤 내 작업</div>
     <div class="nav-sec">플랜 <button class="ib" data-act="plan-add" title="새 플랜">＋</button></div>
-    <div class="plans">${plans().map(p => `<div class="nav-item ${p.id === pid ? 'active' : ''}" data-act="plan-open" data-id="${p.id}">${planDot(p)}<span style="overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</span></div>`).join('')}</div>
+    <div class="plans">${plans().filter(p => !p.priv).map(planItem).join('')}</div>
+    ${pOwner() ? (pOpen()
+      ? `<div class="nav-sec">🔓 비공개 플랜 <button class="ib" data-act="priv-add" title="새 비공개 플랜">＋</button><button class="ib" data-act="priv-menu" title="비공개 플랜 메뉴">⋯</button></div>
+         <div class="plans">${plans().filter(p => p.priv).map(planItem).join('') || '<div class="muted" style="padding:4px 16px">비공개 플랜이 없습니다.</div>'}</div>
+         <div class="nav-item" data-act="priv-lock" title="마지막 조작 후 10분이 지나면 자동으로 잠깁니다">🔒 지금 잠그기${S.p.err ? ' <span style="color:#d13438">· 저장 오류</span>' : S.p.saving ? ' <span class="muted">· 저장 중</span>' : ''}</div>`
+      : `<div class="nav-item" data-act="priv-open" title="암호를 입력해 엽니다">🔒 비공개 플랜</div>`) : ''}
     <div class="nav-bottom">
       <div class="nav-item" data-act="members">👥 구성원 관리 (${members().length})</div>
       <div class="nav-item" data-act="activity">🕘 활동 로그</div>
@@ -834,13 +1017,13 @@ function mainHtml(){
   const p = curPlan(); if (!p) return `<button class="ib mnav" data-act="nav-toggle">☰</button><div class="empty">플랜이 없습니다. 왼쪽 ‘＋’로 새 플랜을 만드세요.</div>`;
   const v = S.ui.view, n = fCount();
   return `<header class="ph">
-    <div class="ph-top"><button class="ib mnav" data-act="nav-toggle" title="메뉴">☰</button>${planDot(p, true)}<div class="ptitle" data-act="plan-rename" title="클릭하여 이름 변경">${esc(p.name)}</div>
+    <div class="ph-top"><button class="ib mnav" data-act="nav-toggle" title="메뉴">☰</button>${planDot(p, true)}<div class="ptitle" data-act="plan-rename" title="클릭하여 이름 변경">${esc(p.name)}</div>${p.priv ? '<span class="tag k" title="나만 볼 수 있는 플랜">🔒 비공개</span>' : ''}
       <div class="tabs">${[['board','보드'],['grid','그리드'],['schedule','일정']].map(([k,t]) => `<div class="tab ${v === k ? 'active' : ''}" data-act="view" data-v="${k}">${t}</div>`).join('')}</div>
       <div class="ph-right">
         <input class="search" data-inp="search" placeholder="🔍 작업 검색" value="${esc(S.ui.filters.text)}">
         ${doneBtn()}
         <button class="btn ${n ? 'on' : ''}" data-act="filter">필터${n ? ` (${n})` : ''}</button>
-        ${v === 'board' ? `<span class="gb">그룹화 <select data-chg="groupby">${[['bucket','버킷'],['assignee','담당자'],['labels','레이블'],['due','마감일']].map(([k,t]) => `<option value="${k}" ${S.ui.groupBy === k ? 'selected' : ''}>${t}</option>`).join('')}</select></span>` : ''}
+        ${v === 'board' ? `<span class="gb">그룹화 <select data-chg="groupby">${[['bucket','버킷'],['assignee','담당자'],['labels','레이블'],['due','마감일']].filter(([k]) => !(p.priv && k === 'assignee')).map(([k,t]) => `<option value="${k}" ${S.ui.groupBy === k ? 'selected' : ''}>${t}</option>`).join('')}</select></span>` : ''}
         <button class="ib" data-act="plan-menu" title="플랜 메뉴">⋯</button>
       </div></div>
     ${S.ui.fltOpen ? filterHtml(p.id) : ''}
@@ -854,7 +1037,7 @@ function filterHtml(pid){
   return `<div class="fpanel" data-keep>
     <div class="fhead">필터 <button class="linkbtn" data-act="flt-clear">모두 지우기</button></div>
     <div class="fsec"><h4>마감일</h4>${DUE_GROUPS.map(d => opt('due', d.k, d.t)).join('')}</div>
-    <div class="fsec"><h4>담당자</h4>${opt('assignees','none','담당자 없음')}${members().map(m => opt('assignees', m.id, avatar(m.id,'sm') + esc(m.name))).join('')}</div>
+    ${S.db.plans[pid]?.priv ? '' : `<div class="fsec"><h4>담당자</h4>${opt('assignees','none','담당자 없음')}${members().map(m => opt('assignees', m.id, avatar(m.id,'sm') + esc(m.name))).join('')}</div>`}
     <div class="fsec"><h4>레이블</h4>${opt('labels','none','레이블 없음')}${labelsOf(pid).map(l => opt('labels', l.id, lchip(l.id))).join('')}</div>
     <div class="fsec"><h4>버킷</h4>${buckets(pid).map(b => opt('buckets', b.id, esc(b.name))).join('')}</div>
   </div>`;
@@ -907,7 +1090,7 @@ function cardHtml(t, g){
     <div class="ct-row">${chkBtn(t)}<div class="ct">${esc(t.title)}</div></div>
     ${meta ? `<div class="cmeta">${meta}</div>` : ''}
     <div class="cfoot"><div class="avs">${as.map(id => avatar(id,'sm')).join('')}</div><span class="sp"></span>
-      <button class="addchip csm" data-act="card-asg" data-id="${t.id}">＋ 담당자</button>
+      ${t.priv ? '' : `<button class="addchip csm" data-act="card-asg" data-id="${t.id}">＋ 담당자</button>`}
       <button class="addchip csm" data-act="card-lbl" data-id="${t.id}">＋ 레이블</button>
       <button class="addchip csm" data-act="card-date" data-id="${t.id}">＋ 날짜</button>
       <button class="ib" data-act="card-menu" data-id="${t.id}" title="메뉴">⋯</button></div>
@@ -987,11 +1170,11 @@ function panelHtml(t){
     <div class="pn-b">
       <div class="pn-trow ${t.done ? 'done' : ''}">${chkBtn(t, 'big')}<input class="pn-title" data-chg="t-title" value="${esc(t.title)}"></div>
       ${t.done ? `<div class="muted" style="margin:2px 0 0 30px">완료: ${esc(memberName(t.doneBy))} · ${fmtTs(t.doneAt)}</div>` : ''}
-      <div class="row"><label>담당자</label><div class="chips">
+      ${t.priv ? '<div class="row muted">🔒 비공개 플랜의 작업은 담당자를 지정할 수 없습니다.</div>' : `<div class="row"><label>담당자</label><div class="chips">
         ${as.map(id => `<span class="achip">${avatar(id,'sm')}${esc(memberName(id))}<button class="x" data-act="asg-remove" data-m="${id}" title="제거">✕</button></span>`).join('')}
         <button class="addchip" data-act="pop" data-p="asg">＋ 담당자</button></div>
         ${S.ui.pop === 'asg' ? `<div class="pop" data-keep>${popHtml(t, 'asg')}</div>` : ''}
-      </div>
+      </div>`}
       <div class="row"><label>레이블</label><div class="chips">${ls.map(id => lchip(id, true)).join('')}<button class="addchip" data-act="pop" data-p="lbl">＋ 레이블</button></div>
         ${S.ui.pop === 'lbl' ? `<div class="pop" data-keep>${popHtml(t, 'lbl')}</div>` : ''}
       </div>
@@ -1170,6 +1353,7 @@ function taskMenu(id, x, y){
     {label:'⧉ 복제', fn:() => dupTask(id)},
     {sep:true},
     {label:'🗂 다른 버킷으로 이동', fn:() => moveModal(id)},
+    {label:'📋 다른 플랜으로 이동', fn:() => planMoveModal('task', id)},
     {label:'⬆ 위로 한 칸', fn:() => nudgeTask(id, -1)},
     {label:'⬇ 아래로 한 칸', fn:() => nudgeTask(id, 1)},
     {sep:true},
@@ -1231,7 +1415,7 @@ function toggleDone(id){
 /* 휴지통 6개월 경과분 영구 삭제: 내용을 지우고 'purged' 표식만 남김(다른 PC 사본과 병합돼도 되살아나지 않음) */
 function purgeOld(){
   const lim = Date.now() - KEEP_MS, old = x => !x.purged && x.deleted && x.deletedAt && x.deletedAt < lim;
-  let n = 0; const stub = (c, id) => { const t = now(); S.db[c][id] = {id, purged:true, deleted:true, _v:{purged:t, deleted:t}}; n++; };
+  let n = 0, np = 0; const stub = (c, id) => { const t = now(), pv = !!S.db[c][id]?.priv; S.db[c][id] = Object.assign({id, purged:true, deleted:true, _v:{purged:t, deleted:t}}, pv ? {priv:true} : {}); pv ? np++ : n++; };
   const deadPlans = new Set(Object.values(S.db.plans).filter(old).map(p => p.id));
   Object.values(S.db.buckets).forEach(b => { if (!b.purged && (old(b) || deadPlans.has(b.planId))) stub('buckets', b.id); });
   const deadTasks = new Set();
@@ -1241,6 +1425,7 @@ function purgeOld(){
   Object.values(S.db.comments).forEach(c => { if (!c.purged && (old(c) || deadTasks.has(c.taskId))) stub('comments', c.id); });
   deadPlans.forEach(id => stub('plans', id));
   if (n) markDirty();
+  if (np) pMarkDirty();
 }
 function orderBetween(list, beforeId){
   if (!list.length) return 0;
@@ -1262,6 +1447,69 @@ function moveToBucket(id, bid){
     updateTask(id, 'bucketId', bid, {noRender:true});
   }
   closeModal(); render();
+}
+/* ---------- 다른 플랜으로 이동 (카드·버킷) ----------
+   · 공유 플랜끼리, 비공개 플랜끼리만 이동 가능(공유↔비공개 금지)
+   · 카드: 이름이 같은 버킷 → 없으면 첫 번째 버킷의 맨 위
+   · 레이블: 같은 이름 레이블에 연결, 없으면 같은 이름·색으로 새로 만듦
+   · 버킷: 안의 카드(완료 포함)와 함께 맨 오른쪽으로. 원래 플랜에 버킷이 없어지면 '할 일' 자동 생성 */
+function canMovePlan(fromPid, toPid){
+  const a = S.db.plans[fromPid], b = S.db.plans[toPid];
+  return !!a && !!b && !b.deleted && fromPid !== toPid && !!a.priv === !!b.priv;
+}
+function mapLabels(ids, toPid){
+  const out = [];
+  for (const id of ids || []){
+    const l = S.db.labels[id]; if (!l || l.deleted) continue;
+    if (l.planId === toPid){ out.includes(id) || out.push(id); continue; }
+    const same = labelsOf(toPid).find(x => (x.name || '').trim() === (l.name || '').trim());
+    const nid = same ? same.id : create('labels', {planId: toPid, name: l.name, color: l.color}).id;
+    if (!out.includes(nid)) out.push(nid);
+  }
+  return out;
+}
+function moveTaskCore(t, toPid, toBid, order){
+  const fromName = S.db.plans[t.planId]?.name || '';
+  const ls = mapLabels(t.labels, toPid);
+  setF('tasks', t.id, 'planId', toPid); setF('tasks', t.id, 'bucketId', toBid); setF('tasks', t.id, 'order', order);
+  if (!same(ls, t.labels || [])) setF('tasks', t.id, 'labels', ls);
+  if (S.db.plans[toPid].priv && (t.assignees || []).length) setF('tasks', t.id, 'assignees', []);
+  touch(t.id);
+  Object.values(S.db.history).forEach(h => { if (h.taskId === t.id && !h.purged && h.planId !== toPid) setF('history', h.id, 'planId', toPid); });   // 이력도 카드를 따라감
+  logH(t.id, '이동', '플랜', fromName, S.db.plans[toPid].name);
+}
+function moveTaskToPlan(id, toPid){
+  const t = S.db.tasks[id]; if (!t || t.deleted || !canMovePlan(t.planId, toPid)) return false;
+  const to = S.db.plans[toPid], srcB = S.db.buckets[effBucket(t)];
+  if (!confirm(`‘${t.title}’ 작업을 ‘${to.name}’ 플랜으로 옮길까요?`)) return false;
+  let b = buckets(toPid).find(x => srcB && (x.name || '').trim() === (srcB.name || '').trim()) || buckets(toPid)[0];
+  if (!b) b = create('buckets', {planId: toPid, name: '할 일', order: 0});
+  const os = tasksOf(toPid).filter(x => effBucket(x) === b.id).map(x => x.order || 0);
+  moveTaskCore(t, toPid, b.id, os.length ? Math.min(...os) - 1 : 0);
+  if (S.ui.openTaskId === id) S.ui.openTaskId = null;
+  closeModal(); render(); return true;
+}
+function moveBucketToPlan(bid, toPid){
+  const b = S.db.buckets[bid]; if (!b || b.deleted || !canMovePlan(b.planId, toPid)) return false;
+  const fromPid = b.planId, to = S.db.plans[toPid];
+  const ts = tasksOf(fromPid).filter(t => effBucket(t) === bid);
+  if (!confirm(`‘${b.name}’ 버킷을 ‘${to.name}’ 플랜으로 옮길까요?${ts.length ? `\n버킷 안의 작업 ${ts.length}개(완료 포함)도 함께 옮겨집니다.` : ''}`)) return false;
+  const bs = buckets(toPid);
+  setF('buckets', bid, 'planId', toPid); setF('buckets', bid, 'order', bs.length ? (bs[bs.length-1].order || 0) + 1 : 0);
+  ts.forEach(t => moveTaskCore(t, toPid, bid, t.order || 0));
+  if (!buckets(fromPid).length) create('buckets', {planId: fromPid, name: '할 일', order: 0});
+  if (S.ui.openTaskId && ts.some(t => t.id === S.ui.openTaskId)) S.ui.openTaskId = null;
+  closeModal(); render(); return true;
+}
+function planMoveModal(kind, id){
+  const src = kind === 'task' ? S.db.tasks[id] : S.db.buckets[id]; if (!src) return;
+  openModal(() => {
+    const list = plans().filter(p => canMovePlan(src.planId, p.id));
+    return {title: `다른 플랜으로 이동 — ${esc(kind === 'task' ? src.title : src.name)}`, body: (list.length
+      ? list.map(p => `<div class="mrow"><button class="btn" style="flex:1;text-align:left;display:flex;align-items:center;gap:8px;padding:8px 12px" data-act="plan-move-to" data-k="${kind}" data-id="${id}" data-p="${p.id}">${planDot(p)}${esc(p.name)}</button></div>`).join('')
+      : '<div class="muted">옮길 수 있는 플랜이 없습니다.</div>')
+      + `<div class="muted" style="margin-top:8px">${S.db.plans[src.planId]?.priv ? '비공개 플랜끼리만 옮길 수 있습니다.' : '공유 플랜끼리만 옮길 수 있습니다. 비공개 플랜으로는 옮길 수 없습니다.'}</div>`};
+  });
 }
 function nudgeTask(id, d){
   const t = S.db.tasks[id]; if (!t) return;
@@ -1309,10 +1557,11 @@ const ACT = {
   'ms-logout': () => msLogout(),
   'gf-connect': () => { const v = $('#gf-in')?.value || ''; S.gInput = v; if (v.trim()) gStart(v); },
   'gf-retry': async () => { S.gBusy = true; S.gErr = ''; render(); try { await gConnect(gFolder()); } catch(e){ S.gErr = e.message || String(e); } S.gBusy = false; if (S.mode !== 'graph') render(); },
-  'gf-change': () => { if (S.dirty && !confirm('아직 저장되지 않은 변경이 있습니다. 그래도 연결을 해제할까요?')) return; localStorage.removeItem(LS_GF); localStorage.removeItem(LS_GCACHE); S.mode = null; S.g = {}; S.db = emptyDb(); render(); },
+  'gf-change': async () => { if ((S.dirty || S.p.dirty) && !confirm('아직 저장되지 않은 변경이 있습니다. 그래도 연결을 해제할까요?')) return; await pLock(); pDrop(); localStorage.removeItem(LS_GF); localStorage.removeItem(LS_GCACHE); S.mode = null; S.g = {}; S.db = emptyDb(); render(); },
   'nav-toggle': () => document.body.classList.toggle('navopen'),
   'task-move': el => moveModal(el.dataset.id),
   'move-to': el => moveToBucket(el.dataset.id, el.dataset.b),
+  'plan-move-to': el => el.dataset.k === 'task' ? moveTaskToPlan(el.dataset.id, el.dataset.p) : moveBucketToPlan(el.dataset.id, el.dataset.p),
   'my': () => { S.ui.view = 'my'; S.ui.fltOpen = false; render(); },
   'plan-open': el => { S.ui.planId = el.dataset.id; if (S.ui.view === 'my') S.ui.view = 'board'; Object.assign(S.ui.filters, {labels:[], buckets:[]}); S.ui.fltOpen = false; S.ui.openTaskId = null; render(); },
   'plan-add': () => { const n = prompt('새 플랜 이름'); if (!n || !n.trim()) return; const p = create('plans', {name:n.trim()}); create('buckets', {planId:p.id, name:'할 일', order:0}); S.ui.planId = p.id; S.ui.view = 'board'; render(); },
@@ -1336,6 +1585,7 @@ const ACT = {
   'bucket-rename': el => { const b = S.db.buckets[el.dataset.id]; const n = prompt('버킷 이름', b.name); if (n && n.trim() && n !== b.name){ setF('buckets', b.id, 'name', n.trim()); render(); } },
   'bucket-menu': el => { const id = el.dataset.id, r = el.getBoundingClientRect(); showMenu(r.left, r.bottom + 2, [
       {label:'✏ 이름 바꾸기', fn:() => ACT['bucket-rename']({dataset:{id}})},
+      {label:'📋 다른 플랜으로 이동', fn:() => planMoveModal('bucket', id)},
       {sep:true}, {label:'🗑 버킷 삭제', danger:true, fn:() => delBucket(id)}]); },
   'panel-close': () => { S.ui.openTaskId = null; S.ui.pop = null; render(); },
   'hist': el => historyModal(el.dataset.id, el.dataset.back),
@@ -1363,7 +1613,26 @@ const ACT = {
   'trash': () => trashModal(),
   'activity': () => activityModal(),
   'export-csv': () => exportCsv(),
-  'export-json': () => download(`planner_data_백업_${today().replace(/-/g,'')}.json`, JSON.stringify(S.db, null, 1), 'application/json'),
+  'export-json': () => download(`planner_data_백업_${today().replace(/-/g,'')}.json`, JSON.stringify(pubDb(S.db), null, 1), 'application/json'),   // 비공개 플랜은 넣지 않음
+  'priv-open': () => pOpenFlow(),
+  'priv-lock': () => pLock(),
+  'priv-add': () => { if (!pOpen()) return; const n = prompt('새 비공개 플랜 이름'); if (!n || !n.trim()) return; const p = create('plans', {name: n.trim(), priv: true}); create('buckets', {planId: p.id, name: '할 일', order: 0}); S.ui.planId = p.id; S.ui.view = 'board'; render(); },
+  'priv-menu': el => { const r = el.getBoundingClientRect(); showMenu(r.left, r.bottom + 2, [
+      {label: '🔑 암호 변경', fn: () => { S.p.msg = ''; privModal('change'); }},
+      {label: '🔒 지금 잠그기', fn: () => pLock()}]); },
+  'pw-unlock': () => { const v = $('#pw-in')?.value || ''; if (!v) return; pRun(() => pUnlock(v)); },
+  'pw-create': () => { const a = $('#pw-new')?.value || '', b = $('#pw-new2')?.value || '';
+    if (a.length < 6){ S.p.msg = '암호는 6자 이상으로 정해 주세요.'; refreshModal(true); return; }
+    if (a !== b){ S.p.msg = '두 암호가 서로 다릅니다.'; refreshModal(true); return; }
+    pRun(() => pCreate(a), '비공개 플랜을 만들었습니다. 암호를 잊으면 되살릴 수 없으니 따로 적어 두세요.'); },
+  'pw-change': () => { const c = $('#pw-cur')?.value || '', a = $('#pw-new')?.value || '', b = $('#pw-new2')?.value || '';
+    if (a.length < 6){ S.p.msg = '새 암호는 6자 이상으로 정해 주세요.'; refreshModal(true); return; }
+    if (a !== b){ S.p.msg = '새 암호 두 칸이 서로 다릅니다.'; refreshModal(true); return; }
+    pRun(() => pChangePw(c, a), '암호를 바꿨습니다.'); },
+  'pw-forgot': () => {
+    if (!confirm('암호를 잊으면 비공개 플랜 내용을 되살릴 방법이 없습니다.\n비공개 플랜을 모두 지우고 새 암호로 다시 시작할까요?')) return;
+    if (prompt('정말 지우려면 ‘삭제’라고 입력하세요.') !== '삭제') return;
+    pRun(async () => { await pReset(); }).then(() => { if (!S.p.msg) { S.p.msg = ''; privModal('create'); } }); },
   'switch-user': () => S.mode === 'graph' ? ACT['rename-me']() : userModal(),
   'rename-me': () => { const m = S.db.members[S.user]; if (!m) return; const n = prompt('내 이름(표시 명칭) 바꾸기', m.name); if (n && n.trim() && n.trim() !== m.name){ setF('members', m.id, 'name', n.trim()); render(); } },
   'acct-new': () => { const n = $('#acct-name').value.trim(); if (!n || acctMember()) return; const m = create('members', {name:n, email:S.me.email, msId:S.me.id}); S.db.members[m.id].createdBy = m.id; acctBind(m.id); },
@@ -1421,7 +1690,7 @@ const CHG = {
   't-start': el => setDate(el, 'start'),
   't-due': el => setDate(el, 'due'),
   't-notes': el => updateTask(S.ui.openTaskId, 'notes', el.value),
-  'asg': el => { const t = S.db.tasks[el.dataset.t || S.ui.openTaskId]; let a = (t.assignees||[]).filter(x => x !== el.dataset.m); if (el.checked) a.push(el.dataset.m); updateTask(t.id, 'assignees', a); },
+  'asg': el => { const t = S.db.tasks[el.dataset.t || S.ui.openTaskId]; if (!t || t.priv) return; let a = (t.assignees||[]).filter(x => x !== el.dataset.m); if (el.checked) a.push(el.dataset.m); updateTask(t.id, 'assignees', a); },
   'lbl': el => { const t = S.db.tasks[el.dataset.t || S.ui.openTaskId]; let a = (t.labels||[]).filter(x => x !== el.dataset.l); if (el.checked) a.push(el.dataset.l); updateTask(t.id, 'labels', a); },
   'cl-done': el => { const t = S.db.tasks[S.ui.openTaskId], cl = (t.checklist||[]).map(i => i.id === el.dataset.i ? {...i, done: el.checked} : i), it = cl.find(i => i.id === el.dataset.i);
     updateTask(t.id, 'checklist', cl, {noLog:true, noRender:true}); logH(t.id, '수정', `체크리스트: ${it.text}`, el.checked ? '미완료' : '완료', el.checked ? '완료' : '미완료'); render(); },
@@ -1447,6 +1716,7 @@ document.addEventListener('keydown', e => {
     else if (k === 'user-new') ACT['user-new']();
     else if (k === 'gf-in') ACT['gf-connect']();
     else if (k === 'acct-new') ACT['acct-new']();
+    else if (k === 'pw-unlock' || k === 'pw-create' || k === 'pw-change') ACT[k]();
     return;
   }
   if (k && e.key === 'Escape'){ if (k === 'newtask'){ S.ui.addingIn = null; render(); } if (k === 'newbucket'){ S.ui.addingBucket = false; render(); } return; }
@@ -1479,6 +1749,13 @@ document.addEventListener('dragstart', e => {
 });
 document.addEventListener('dragover', e => {
   if (!S.drag) return;
+  const np = e.target.closest('[data-drop="plan"]');
+  if (np){                                            // 왼쪽 메뉴의 플랜 위: 다른 플랜으로 이동
+    clearDrop();
+    const src = S.drag.type === 'task' ? S.db.tasks[S.drag.id] : S.db.buckets[S.drag.id];
+    if (!src || !canMovePlan(src.planId, np.dataset.pid)){ e.dataTransfer.dropEffect = 'none'; return; }
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move'; np.classList.add('over'); return;
+  }
   if (S.drag.type === 'task'){
     const z = e.target.closest('[data-drop]'); clearDrop();
     if (!z || z.dataset.nodrop){ e.dataTransfer.dropEffect = 'none'; return; }
@@ -1493,6 +1770,12 @@ document.addEventListener('dragover', e => {
 document.addEventListener('drop', e => {
   if (!S.drag) return; e.preventDefault();
   const d = S.drag;
+  const np = e.target.closest('[data-drop="plan"]');
+  if (np){
+    S.drag = null; clearDrop(); $$('.dragging').forEach(x => x.classList.remove('dragging'));
+    d.type === 'task' ? moveTaskToPlan(d.id, np.dataset.pid) : moveBucketToPlan(d.id, np.dataset.pid);
+    return;
+  }
   if (d.type === 'task'){
     const z = e.target.closest('[data-drop]');
     if (z && !z.dataset.nodrop){
@@ -1517,7 +1800,7 @@ document.addEventListener('drop', e => {
 document.addEventListener('dragend', () => { $$('.dragging').forEach(x => x.classList.remove('dragging')); clearDrop(); const pend = S.renderPending; S.drag = null; S.renderPending = false; if (pend) render(); });
 
 /* ---------- boot ---------- */
-window.addEventListener('beforeunload', e => { gCacheSave(); if (S.dirty || S.saving){ saveNow(); e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { gCacheSave(); if (S.p.dirty || S.p.saving){ pSave(); e.preventDefault(); e.returnValue = ''; } if (S.dirty || S.saving){ saveNow(); e.preventDefault(); e.returnValue = ''; } });
 window.addEventListener('pagehide', () => gCacheSave());
 window.addEventListener('focus', () => poll(true));
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') poll(true); else gCacheSave(); });
