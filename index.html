@@ -1332,7 +1332,7 @@ function trashModal(){
 function membersModal(){
   openModal(() => ({title:`구성원 관리 <span class="muted" style="margin-left:8px;font-weight:400">${members().length}명</span>`, body: `
     ${members().map(m => `<div class="mrow">${avatar(m.id)}<input type="text" data-chg="mem-name" data-id="${m.id}" value="${esc(m.name)}"><span class="muted" style="min-width:120px;word-break:break-all">${m.email ? '☁ ' + esc(m.email) : '계정 미연결'}</span>${m.id === S.user ? '<span class="muted">나</span>' : `<button class="btn danger" data-act="mem-del" data-id="${m.id}">삭제</button>`}</div>`).join('')}
-    ${S.mode === 'graph' && S.g.acctCode ? `<div class="mrow" style="margin-top:6px;font-size:13px">내 계정 코드 <code style="background:#f3f2f1;padding:2px 6px;border-radius:4px;user-select:all">${esc(S.g.acctCode)}</code><button class="btn" data-act="copy-code">복사</button><span class="muted">${S.g.owner ? '비공개 플랜 사용 가능' : '비공개 플랜 미지정 계정'}</span></div>` : ''}
+    ${pOwner() && S.g.acctCode ? `<div class="mrow" style="margin-top:6px;font-size:13px">내 계정 코드 <code style="background:#f3f2f1;padding:2px 6px;border-radius:4px;user-select:all">${esc(S.g.acctCode)}</code><button class="btn" data-act="copy-code">복사</button><span class="muted">${S.g.owner ? '비공개 플랜 사용 가능' : '비공개 플랜 미지정 계정'}</span></div>` : ''}
     <div class="mrow" style="margin-top:10px"><input type="text" id="mem-new" data-key="mem-add" placeholder="새 구성원 이름"><button class="btn primary" data-act="mem-add">추가</button></div>
     <div class="muted" style="margin-top:8px;line-height:1.6">구성원은 모든 플랜에서 담당자로 지정할 수 있습니다. 삭제해도 기존 이력의 이름은 남습니다.<br>Microsoft 계정과 이름은 1:1로 연결되며, 연결된 계정은 바꿀 수 없습니다(이름만 변경 가능). 여기서 추가한 이름은 ‘계정 미연결’ 상태로, 그 사람이 처음 로그인할 때 한 번 연결할 수 있습니다.</div>`}));
 }
