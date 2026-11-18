@@ -651,7 +651,8 @@ async function gConnect(f){
   if (c && c.key === gKey() && c.db){ const m = merge(db, normDb(c.db)); fromCache = JSON.stringify(m) !== JSON.stringify(db); db = m; }
   const me = await gjson('/me?$select=id,displayName,userPrincipalName,mail');
   S.me = {id: me.id || '', email: (me.userPrincipalName || me.mail || '').toLowerCase(), name: me.displayName || ''};
-  try { const md = await gjson('/me/drive?$select=id'); S.g.owner = !!md.id && md.id.toLowerCase() === String(f.driveId).toLowerCase(); } catch(e){ S.g.owner = false; }   // 공유 폴더 소유자만 비공개 플랜 사용
+  S.g.acctCode = await acctCode(S.me.id);
+  S.g.owner = PRIV_OWNERS.includes(S.g.acctCode);      // 비공개 플랜은 지정한 계정만 사용
   pDrop();
   S.db = db; S.g.etag = etag; S.mode = 'graph'; S.dir = null; S.gErr = '';
   localStorage.setItem(LS_GF, JSON.stringify(f)); sessionStorage.removeItem(SS_SILENT);
@@ -674,6 +675,14 @@ async function gStart(input){
    ========================================================= */
 const P_FILE = 'private_plans.json', P_ITER = 310000, P_IDLE = 10 * 60000, LS_PCACHE = 'teamPlanner.pCache';
 const P_PATH = `/me/drive/special/approot:/${P_FILE}`;
+/* 비공개 플랜을 쓸 수 있는 계정의 '계정 코드'(Microsoft 계정 ID를 SHA-256으로 바꾼 값 앞 20자리. 이메일·ID 원문은 넣지 않음)
+   계정 코드는 로그인 후 '구성원 관리'의 내 이름 줄에 표시됨 */
+const PRIV_OWNERS = [];
+async function acctCode(id){
+  if (!id) return '';
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('teamPlanner:' + String(id).toLowerCase())));
+  return Array.from(h, b => b.toString(16).padStart(2, '0')).join('').slice(0, 20);
+}
 S.p = {key: null};
 const pOwner = () => S.mode === 'graph' && !!S.g.owner;
 const pOpen = () => !!S.p.key;
@@ -1323,6 +1332,7 @@ function trashModal(){
 function membersModal(){
   openModal(() => ({title:`구성원 관리 <span class="muted" style="margin-left:8px;font-weight:400">${members().length}명</span>`, body: `
     ${members().map(m => `<div class="mrow">${avatar(m.id)}<input type="text" data-chg="mem-name" data-id="${m.id}" value="${esc(m.name)}"><span class="muted" style="min-width:120px;word-break:break-all">${m.email ? '☁ ' + esc(m.email) : '계정 미연결'}</span>${m.id === S.user ? '<span class="muted">나</span>' : `<button class="btn danger" data-act="mem-del" data-id="${m.id}">삭제</button>`}</div>`).join('')}
+    ${S.mode === 'graph' && S.g.acctCode ? `<div class="mrow" style="margin-top:6px;font-size:13px">내 계정 코드 <code style="background:#f3f2f1;padding:2px 6px;border-radius:4px;user-select:all">${esc(S.g.acctCode)}</code><button class="btn" data-act="copy-code">복사</button><span class="muted">${S.g.owner ? '비공개 플랜 사용 가능' : '비공개 플랜 미지정 계정'}</span></div>` : ''}
     <div class="mrow" style="margin-top:10px"><input type="text" id="mem-new" data-key="mem-add" placeholder="새 구성원 이름"><button class="btn primary" data-act="mem-add">추가</button></div>
     <div class="muted" style="margin-top:8px;line-height:1.6">구성원은 모든 플랜에서 담당자로 지정할 수 있습니다. 삭제해도 기존 이력의 이름은 남습니다.<br>Microsoft 계정과 이름은 1:1로 연결되며, 연결된 계정은 바꿀 수 없습니다(이름만 변경 가능). 여기서 추가한 이름은 ‘계정 미연결’ 상태로, 그 사람이 처음 로그인할 때 한 번 연결할 수 있습니다.</div>`}));
 }
@@ -1615,6 +1625,7 @@ const ACT = {
   'export-csv': () => exportCsv(),
   'export-json': () => download(`planner_data_백업_${today().replace(/-/g,'')}.json`, JSON.stringify(pubDb(S.db), null, 1), 'application/json'),   // 비공개 플랜은 넣지 않음
   'priv-open': () => pOpenFlow(),
+  'copy-code': async el => { try { await navigator.clipboard.writeText(S.g.acctCode); el.textContent = '복사됨'; } catch(e){ prompt('계정 코드를 복사하세요', S.g.acctCode); } },
   'priv-lock': () => pLock(),
   'priv-add': () => { if (!pOpen()) return; const n = prompt('새 비공개 플랜 이름'); if (!n || !n.trim()) return; const p = create('plans', {name: n.trim(), priv: true}); create('buckets', {planId: p.id, name: '할 일', order: 0}); S.ui.planId = p.id; S.ui.view = 'board'; render(); },
   'priv-menu': el => { const r = el.getBoundingClientRect(); showMenu(r.left, r.bottom + 2, [
